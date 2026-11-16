@@ -7,6 +7,8 @@ Commons Codec resources, are carried into the result. The final APK is re-signed
 by the workflow after this ZIP operation.
 """
 import hashlib
+import re
+import struct
 import sys
 import zipfile
 from pathlib import Path
@@ -27,10 +29,54 @@ def is_signature_entry(name):
         or upper == "META-INF/MANIFEST.MF"
     )
 
+def dex_classes(data):
+    if not data.startswith(b"dex\\n"):
+        raise SystemExit("Invalid DEX header while checking original classes")
+    string_count, string_off = struct.unpack_from("<II", data, 56)
+    type_count, type_off = struct.unpack_from("<II", data, 64)
+    class_count, class_off = struct.unpack_from("<II", data, 96)
+
+    def read_uleb(pos):
+        value = shift = 0
+        while True:
+            byte = data[pos]
+            pos += 1
+            value |= (byte & 0x7f) << shift
+            if byte < 0x80:
+                return value, pos
+            shift += 7
+
+    def string_at(index):
+        if index >= string_count:
+            raise SystemExit("DEX string index out of range")
+        off = struct.unpack_from("<I", data, string_off + index * 4)[0]
+        _, pos = read_uleb(off)  # UTF-16 length; descriptor bytes are ASCII
+        end = data.index(b"\\0", pos)
+        return data[pos:end].decode("utf-8", "strict")
+
+    classes = set()
+    for i in range(class_count):
+        class_idx = struct.unpack_from("<I", data, class_off + i * 32)[0]
+        if class_idx >= type_count:
+            raise SystemExit("DEX type index out of range")
+        descriptor_idx = struct.unpack_from("<I", data, type_off + class_idx * 4)[0]
+        classes.add(string_at(descriptor_idx))
+    return classes
+
 tmp = built.with_suffix(".merged.apk")
 with zipfile.ZipFile(original, "r") as src, zipfile.ZipFile(built, "r") as current:
     current_names = set(current.namelist())
     original_names = set(src.namelist())
+    current_dex = [n for n in current_names if re.fullmatch(r"classes(?:[2-9][0-9]*)?\\.dex", n)]
+    current_classes = set()
+    for name in current_dex:
+        current_classes.update(dex_classes(current.read(name)))
+    old_dex = [n for n in src.namelist() if re.fullmatch(r"classes(?:[2-9][0-9]*)?\\.dex", n) and n not in current_names]
+    for name in old_dex:
+        overlap = current_classes.intersection(dex_classes(src.read(name)))
+        if overlap:
+            sample = ", ".join(sorted(overlap)[:5])
+            raise SystemExit(f"Refusing to merge {name}: {len(overlap)} duplicate classes already exist in the new build (e.g. {sample})")
     added = [n for n in src.namelist() if n not in current_names and not is_signature_entry(n)]
     skipped_signatures = [n for n in src.namelist() if is_signature_entry(n)]
     collisions = sorted(n for n in original_names & current_names if not is_signature_entry(n))
