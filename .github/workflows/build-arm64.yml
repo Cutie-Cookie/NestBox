@@ -40,7 +40,7 @@ jobs:
             "https://codeload.github.com/yoro1836/wayondroid/tar.gz/a45f80b1aaa463d199c9056bb8dda7c01be5ece7" \
             -o build/wayondroid.tar.gz
           tar -xzf build/wayondroid.tar.gz -C build/src
-          SOURCE_ROOT="$(tar -tzf build/wayondroid.tar.gz | head -n 1 | cut -d/ -f1)"
+          SOURCE_ROOT="$(tar -tzf build/wayondroid.tar.gz | sed -n '1{s,/.*,,;p;}')"
           test -n "$SOURCE_ROOT"
           test -f "build/src/$SOURCE_ROOT/tawcroot/src/syscalls_fd.c"
           test -f "build/src/$SOURCE_ROOT/app/src/main/cpp/CMakeLists.txt"
