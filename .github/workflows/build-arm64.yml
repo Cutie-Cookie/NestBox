@@ -11,8 +11,9 @@ permissions:
 
 jobs:
   build:
-    name: Build installable ARM64 APK
+    name: Build and verify complete ARM64 engine APK
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     steps:
       - name: Check out source
         uses: actions/checkout@v4
@@ -23,28 +24,106 @@ jobs:
           distribution: temurin
           java-version: '17'
 
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install pinned Android build tools
+        run: |
+          sdkmanager "platforms;android-35" "build-tools;35.0.0" "ndk;28.2.13676358" "cmake;3.22.1"
+
+      - name: Fetch pinned Wayondroid source
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p build/src
+          curl --fail --location --retry 3 \
+            "https://codeload.github.com/yoro1836/wayondroid/tar.gz/a45f80b1aaa463d199c9056bb8dda7c01be5ece7" \
+            -o build/wayondroid.tar.gz
+          tar -xzf build/wayondroid.tar.gz -C build/src
+          SOURCE_ROOT="$(tar -tzf build/wayondroid.tar.gz | head -n 1 | cut -d/ -f1)"
+          test -n "$SOURCE_ROOT"
+          test -f "build/src/$SOURCE_ROOT/tawcroot/src/syscalls_fd.c"
+          test -f "build/src/$SOURCE_ROOT/app/src/main/cpp/CMakeLists.txt"
+          echo "WAYON_SOURCE=$GITHUB_WORKSPACE/build/src/$SOURCE_ROOT" >> "$GITHUB_ENV"
+          echo "Using Wayondroid source: $SOURCE_ROOT"
+
+      - name: Fetch checksum-verified Wayondroid runtime libraries
+        run: python3 -I scripts/fetch_engines.py
+
+      - name: Build patched ARM64 tawcroot
+        run: bash scripts/build_tawcroot.sh "$WAYON_SOURCE" "$ANDROID_HOME/ndk/28.2.13676358"
+
+      - name: Build patched ARM64 rootless helper and guest su
+        run: bash scripts/build_helper.sh "$WAYON_SOURCE" "$ANDROID_HOME"
+
+      - name: Verify every required native library before Gradle packaging
+        shell: bash
+        run: |
+          set -euo pipefail
+          JNI="app/src/main/jniLibs/arm64-v8a"
+          REQUIRED=(
+            libbinderd.so
+            libc++_shared.so
+            libgfxstream_backend.so
+            libvine_gralloc.so
+            libvine_hal_service.so
+            libvine_kumquat.so
+            libvine_lmkd.so
+            libvine_mediascan.so
+            libvine_pulse.so
+            libvine_runtime.so
+            libvine_vk_gfxstream.so
+            libvine_vold_shim.so
+            libvine_wl.so
+            libtawcroot.so
+            libvine_helper.so
+            libnbsu.so
+          )
+          for lib in "${REQUIRED[@]}"; do
+            test -s "$JNI/$lib" || { echo "::error::Missing or empty native library: $JNI/$lib"; exit 1; }
+            "$ANDROID_HOME/ndk/28.2.13676358/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf" -h "$JNI/$lib" | grep -q "AArch64" || {
+              echo "::error::Not an AArch64 ELF library: $lib"; exit 1;
+            }
+            echo "Verified $lib ($(stat -c %s "$JNI/$lib") bytes)"
+          done
+
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
 
       - name: Build debug APK
         run: ./gradlew --no-daemon clean assembleDebug
 
-      - name: Verify ARM64-only package
+      - name: Verify complete installable ARM64 APK
+        shell: bash
         run: |
+          set -euo pipefail
           APK="app/build/outputs/apk/debug/app-debug.apk"
           test -s "$APK"
-          if unzip -Z1 "$APK" | grep -q '^lib/armeabi-v7a/'; then
-            echo "Unexpected 32-bit ARM libraries found"
+          if unzip -Z1 "$APK" | grep -qE '^lib/(armeabi-v7a|x86|x86_64)/'; then
+            echo "::error::Unexpected non-ARM64 native libraries found"
             exit 1
           fi
+          REQUIRED=(
+            libbinderd.so libc++_shared.so libgfxstream_backend.so
+            libvine_gralloc.so libvine_hal_service.so libvine_kumquat.so
+            libvine_lmkd.so libvine_mediascan.so libvine_pulse.so
+            libvine_runtime.so libvine_vk_gfxstream.so libvine_vold_shim.so
+            libvine_wl.so libtawcroot.so libvine_helper.so libnbsu.so
+          )
+          for lib in "${REQUIRED[@]}"; do
+            unzip -Z1 "$APK" | grep -Fxq "lib/arm64-v8a/$lib" || {
+              echo "::error::APK is missing lib/arm64-v8a/$lib"
+              exit 1
+            }
+          done
+          echo "All ${#REQUIRED[@]} required ARM64 libraries are packaged."
           echo "APK size: $(du -h "$APK" | cut -f1)"
-          echo "Native libraries:"
-          unzip -Z1 "$APK" | grep '^lib/arm64-v8a/' || true
+          sha256sum "$APK"
 
-      - name: Upload APK
+      - name: Upload verified APK
         uses: actions/upload-artifact@v4
         with:
-          name: NestBox-arm64-v8a-debug
+          name: NestBox-arm64-v8a-debug-fixed
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 14
