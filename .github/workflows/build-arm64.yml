@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - bypass-process-limit-check
+      - complete-original-apk-diagnostics
   workflow_dispatch:
 
 permissions:
@@ -95,6 +96,25 @@ jobs:
       - name: Build debug APK
         run: ./gradlew --no-daemon clean assembleDebug
 
+      - name: Restore original APK-only components and re-sign
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK="app/build/outputs/apk/debug/app-debug.apk"
+          ORIGINAL="$RUNNER_TEMP/NestBox-0.4.0-original.apk"
+          curl --fail --location --retry 3 \
+            "https://github.com/rifatrajbd/NestBox-An-Android-Emulator-Support-Lineage-OS/releases/download/v0.4.0/NestBox-0.4.0-debug.apk" \
+            -o "$ORIGINAL"
+          python3 -I scripts/merge_original_apk.py "$ORIGINAL" "$APK"
+          "$ANDROID_HOME/build-tools/35.0.0/zipalign" -f 4 "$APK" "$RUNNER_TEMP/app-aligned.apk"
+          test -s "$HOME/.android/debug.keystore"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign \
+            --ks "$HOME/.android/debug.keystore" \
+            --ks-key-alias androiddebugkey \
+            --ks-pass pass:android --key-pass pass:android \
+            --out "$RUNNER_TEMP/app-signed.apk" "$RUNNER_TEMP/app-aligned.apk"
+          mv "$RUNNER_TEMP/app-signed.apk" "$APK"
+
       - name: Verify complete installable ARM64 APK
         shell: bash
         run: |
@@ -129,7 +149,7 @@ jobs:
       - name: Upload verified APK
         uses: actions/upload-artifact@v4
         with:
-          name: NestBox-arm64-v8a-debug-fixed
+          name: NestBox-arm64-v8a-debug-complete
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 14
