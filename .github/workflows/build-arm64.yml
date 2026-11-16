@@ -107,9 +107,13 @@ jobs:
             -o "$ORIGINAL"
           python3 -I scripts/merge_original_apk.py "$ORIGINAL" "$APK"
           "$ANDROID_HOME/build-tools/35.0.0/zipalign" -f 4 "$APK" "$RUNNER_TEMP/app-aligned.apk"
-          test -s "$HOME/.android/debug.keystore"
+          keytool -genkeypair -noprompt \
+            -keystore "$RUNNER_TEMP/NestBox-debug.keystore" \
+            -storepass android -keypass android -alias androiddebugkey \
+            -keyalg RSA -keysize 2048 -validity 10000 \
+            -dname "CN=Android Debug,O=Android,C=US"
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign \
-            --ks "$HOME/.android/debug.keystore" \
+            --ks "$RUNNER_TEMP/NestBox-debug.keystore" \
             --ks-key-alias androiddebugkey \
             --ks-pass pass:android --key-pass pass:android \
             --out "$RUNNER_TEMP/app-signed.apk" "$RUNNER_TEMP/app-aligned.apk"
