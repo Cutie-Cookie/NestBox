@@ -113,6 +113,7 @@ jobs:
             "https://github.com/baksmali/smali/releases/download/3.0.10/smali-3.0.10-fat.jar" -o "$SMALI"
           echo "37ae4a41a8886e15c20b8362fa4250f96bbdb55e1a608199ad8b5dff068b588f  $BAKSMALI" | sha256sum -c -
           echo "32fa0e88a6c397b3922201adf5f3e534fbaed5a663c71d0c558c3ddce0af844a  $SMALI" | sha256sum -c -
+          # Rebuild the old final DEX after removing class definitions already supplied by the current build.
           python3 -I scripts/merge_original_apk.py "$ORIGINAL" "$APK" "$BAKSMALI" "$SMALI"
           "$ANDROID_HOME/build-tools/35.0.0/zipalign" -f 4 "$APK" "$RUNNER_TEMP/app-aligned.apk"
           keytool -genkeypair -noprompt \
