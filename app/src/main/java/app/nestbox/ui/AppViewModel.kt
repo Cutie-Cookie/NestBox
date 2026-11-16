@@ -243,7 +243,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             "battery" to c.battery(),
             "recents" to (flags["recents"] == true),
             "popup" to c.popup(),
-            "processes" to (flags["processes"] == true),
+            "processes" to true,
         )
     }
 
