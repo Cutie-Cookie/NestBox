@@ -99,6 +99,10 @@ jobs:
           set -euo pipefail
           APK="app/build/outputs/apk/debug/app-debug.apk"
           test -s "$APK"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$APK"
+          BADGING="$("$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK")"
+          grep -Fq "package: name='app.nbox'" <<< "$BADGING"
+          grep -Fq "sdkVersion:'29'" <<< "$BADGING"
           if unzip -Z1 "$APK" | grep -qE '^lib/(armeabi-v7a|x86|x86_64)/'; then
             echo "::error::Unexpected non-ARM64 native libraries found"
             exit 1
