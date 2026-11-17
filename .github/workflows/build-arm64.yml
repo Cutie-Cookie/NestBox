@@ -57,7 +57,7 @@ jobs:
       - name: Fetch checksum-verified Wayondroid runtime libraries
         run: python3 -I scripts/fetch_engines.py
 
-      - name: Build Android Vulkan host backend with GIPA fallback
+      - name: Build Android Vulkan host backend with directly linked Android loader fallback
         shell: bash
         run: |
           set -euo pipefail
@@ -70,11 +70,37 @@ jobs:
           cat > "$RUNNER_TEMP/patch_gfxstream.py" <<'PY'
           from pathlib import Path
           import sys
-          p = Path(sys.argv[1])
-          s = p.read_text()
+
+          dispatch = Path(sys.argv[1])
+          s = dispatch.read_text()
+          decl_marker = '#include <string.h>'
+          decl = '''#include <string.h>
+
+          #if defined(__ANDROID__)
+          extern "C" VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL vkGetInstanceProcAddr(
+              VkInstance instance, const char* pName);
+          #endif'''
+          if 'extern "C" VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL vkGetInstanceProcAddr(' not in s:
+              if decl_marker not in s:
+                  raise SystemExit("Vulkan header include marker not found")
+              s = s.replace(decl_marker, decl, 1)
+
+          symbol = 'out->vkGetInstanceProcAddr = (PFN_vkGetInstanceProcAddr)dlSymFunc(lib, "vkGetInstanceProcAddr");'
+          linked = symbol + '''
+          #if defined(__ANDROID__)
+              // Force the NDK-linked Android system loader entrypoint. The
+              // runtime dlsym path can resolve a non-loader ICD or miss the
+              // public loader symbol in the app linker namespace.
+              out->vkGetInstanceProcAddr = ::vkGetInstanceProcAddr;
+          #endif'''
+          if 'Force the NDK-linked Android system loader entrypoint.' not in s:
+              if symbol not in s:
+                  raise SystemExit("vkGetInstanceProcAddr dispatch assignment not found")
+              s = s.replace(symbol, linked, 1)
+
           marker = "#endif" + chr(10) + "#ifdef VK_VERSION_1_1"
-          addition = """    // Android's loader may expose global commands through GIPA only.
-              // Vulkan requires VK_NULL_HANDLE for global-command lookups.
+          addition = """    // Resolve Vulkan global commands through the Android loader's
+              // linked GIPA entrypoint when they are not direct exports.
               if (out->vkGetInstanceProcAddr) {
                   if (!out->vkCreateInstance)
                       out->vkCreateInstance = (PFN_vkCreateInstance)out->vkGetInstanceProcAddr(
@@ -89,20 +115,30 @@ jobs:
                               VK_NULL_HANDLE, "vkEnumerateInstanceLayerProperties");
               }
           """
-          if "Android's loader may expose global commands through GIPA only." in s:
-              raise SystemExit("GIPA fallback unexpectedly already present")
-          if marker not in s:
-              raise SystemExit("Could not find Vulkan version boundary in gfxstream source")
-          p.write_text(s.replace(marker, addition + "    #endif" + chr(10) + "#ifdef VK_VERSION_1_1", 1))
-          print("Applied Android Vulkan GIPA fallback directly to pinned gfxstream source")
+          if "Resolve Vulkan global commands through the Android loader's" not in s:
+              if marker not in s:
+                  raise SystemExit("Could not find Vulkan version boundary in gfxstream source")
+              s = s.replace(marker, addition + "    #endif" + chr(10) + "#ifdef VK_VERSION_1_1", 1)
+          dispatch.write_text(s)
+
+          build = Path(sys.argv[2])
+          b = build.read_text()
+          old = "cpp_link_args = ['-Wl,-rpath,\\$ORIGIN']"
+          new = "cpp_link_args = ['-Wl,-rpath,\\$ORIGIN', '-lvulkan']"
+          if new not in b:
+              if old not in b:
+                  raise SystemExit("Could not find Android C++ link args in gfxstream build script")
+              b = b.replace(old, new, 1)
+              build.write_text(b)
+          print("Linked gfxstream backend to Android libvulkan and routed global dispatch through its GIPA")
           PY
           python3 - "$BUILD_SCRIPT" "$RUNNER_TEMP/patch_gfxstream.py" <<'PY'
           from pathlib import Path
           import sys
           p = Path(sys.argv[1])
           s = p.read_text()
-          needle = 'dep_apply_patches gfxstream "$PATCH_DIR"\n'
-          insert = needle + 'python3 "' + sys.argv[2] + '" "$GFXSTREAM_DIR/host/vulkan/cereal/common/goldfish_vk_dispatch.cpp"\n'
+          needle = 'dep_apply_patches gfxstream "$PATCH_DIR"\\n'
+          insert = needle + 'python3 "' + sys.argv[2] + '" "$GFXSTREAM_DIR/host/vulkan/cereal/common/goldfish_vk_dispatch.cpp" "$BUILD_SCRIPT"\\n'
           if needle not in s:
               raise SystemExit("Could not locate gfxstream patch application hook")
           p.write_text(s.replace(needle, insert, 1))
