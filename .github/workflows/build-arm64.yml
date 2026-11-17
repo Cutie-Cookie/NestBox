@@ -138,8 +138,9 @@ jobs:
           test -s "$APK"
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$APK"
           CERTS="$("$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs "$APK")"
-          grep -Fqi "1d:d1:cf:b8:84:6e:f3:dd:b4:39:c1:c8:b2:32:f2:c4:0f:90:75:f5:83:63:2c:c8:d8:23:5c:20:c0:9c:6b:c4" <<< "$CERTS" || {
+          grep -Fqi "1dd1cfb8846ef3ddb439c1c8b232f2c40f9075f583632cc8d8235c20c09c6bc4" <<< "$CERTS" || {
             echo "::error::APK was not signed with the permanent NestBox release key"
+            echo "$CERTS"
             exit 1
           }
           BADGING="$("$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK")"
