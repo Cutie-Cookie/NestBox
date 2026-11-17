@@ -164,6 +164,75 @@ jobs:
                   fs = fs.replace(old_format, new_format, 1)
           format_support.write_text(fs)
 
+          # Some Android Mali drivers expose R8/R16 as Vulkan images but do
+          # not support exporting those formats as AHardwareBuffers. Retry
+          # the image-format query without an external handle and mark those
+          # images non-shareable, allowing gfxstream's copy fallback.
+          common_cpp = Path(sys.argv[4])
+          cc = common_cpp.read_text()
+          query_anchor = "VkResult res = mGetImageFormatProperties2Func(physdev, &formatInfo2, &outProps2);"
+          query_pos = cc.find(query_anchor)
+          if query_pos < 0:
+              raise SystemExit("Could not find external Vulkan image-format query")
+          fail_start = cc.find("    if (res != VK_SUCCESS) {", query_pos)
+          supported_pos = cc.find("    info->supported = true;", fail_start)
+          if fail_start < 0 or supported_pos < 0:
+              raise SystemExit("Could not find external image-format failure branch")
+          old_branch = cc[fail_start:supported_pos]
+          if "R8/R16 non-external fallback" not in old_branch:
+              replacement = """    if (res != VK_SUCCESS) {
+          if (res == VK_ERROR_FORMAT_NOT_SUPPORTED) {
+              if (info->format == VK_FORMAT_R8_UNORM || info->format == VK_FORMAT_R16_UNORM) {
+                  VkImageFormatProperties fallbackProps;
+                  VkResult fallbackRes = vk->vkGetPhysicalDeviceImageFormatProperties(
+                      physdev, info->format, info->type, info->tiling, info->usageFlags,
+                      info->createFlags, &fallbackProps);
+                  if (fallbackRes == VK_SUCCESS) {
+                      info->supported = true;
+                      info->supportsExternalMemory = false;
+                      info->requiresDedicatedAllocation = false;
+                      info->imageFormatProps2 = {
+                          VK_STRUCTURE_TYPE_IMAGE_FORMAT_PROPERTIES_2, 0, fallbackProps,
+                      };
+                      GFXSTREAM_WARNING("R8/R16 non-external fallback: %s",
+                                        string_VkFormat(info->format));
+                      return true;
+                  }
+              }
+              GFXSTREAM_DEBUG("Not Supported: %s %s %s %s",
+                              string_VkFormat(info->format), string_VkImageType(info->type),
+                              string_VkImageTiling(info->tiling),
+                              string_VkImageUsageFlagBits((VkImageUsageFlagBits)info->usageFlags));
+              info->supported = false;
+              return true;
+          } else {
+              GFXSTREAM_ERROR(
+                  "vkGetPhysicalDeviceImageFormatProperties2KHR query "
+                  "failed with %s "
+                  "for format 0x%x type 0x%x usage 0x%x flags 0x%x",
+                  string_VkResult(res), info->format, info->type, info->usageFlags,
+                  info->createFlags);
+              return false;
+          }
+      }
+
+      """
+              cc = cc[:fail_start] + replacement + cc[supported_pos:]
+              common_cpp.write_text(cc)
+
+          common_h = Path(sys.argv[5])
+          hh = common_h.read_text()
+          old_decl = """        gfxstream::base::Optional<VkImage> imageForDedicatedAllocation = gfxstream::base::kNullopt,
+        gfxstream::base::Optional<ColorBufferInfo*> colorBufferInfo = gfxstream::base::kNullopt);"""
+          new_decl = """        gfxstream::base::Optional<VkImage> imageForDedicatedAllocation = gfxstream::base::kNullopt,
+        gfxstream::base::Optional<ColorBufferInfo*> colorBufferInfo = gfxstream::base::kNullopt,
+        bool allowExternalExport = true);"""
+          if new_decl not in hh:
+              if old_decl not in hh:
+                  raise SystemExit("Could not find allocExternalMemory declaration")
+              hh = hh.replace(old_decl, new_decl, 1)
+              common_h.write_text(hh)
+
           build = Path(sys.argv[2])
           b = build.read_text()
           old = "cpp_link_args = ['-Wl,-rpath,\\$ORIGIN']"
@@ -181,7 +250,7 @@ jobs:
           p = Path(sys.argv[1])
           s = p.read_text()
           needle = 'dep_apply_patches gfxstream "$PATCH_DIR"\n'
-          insert = needle + 'python3 "' + sys.argv[2] + '" "$GFXSTREAM_DIR/host/vulkan/cereal/common/goldfish_vk_dispatch.cpp" "$0" "$GFXSTREAM_DIR/host/vulkan/vk_format_support.cpp"\n'
+          insert = needle + 'python3 "' + sys.argv[2] + '" "$GFXSTREAM_DIR/host/vulkan/cereal/common/goldfish_vk_dispatch.cpp" "$0" "$GFXSTREAM_DIR/host/vulkan/vk_format_support.cpp" "$GFXSTREAM_DIR/host/vulkan/vk_common_operations.cpp" "$GFXSTREAM_DIR/host/vulkan/vk_common_operations.h"\n'
           if needle not in s:
               raise SystemExit("Could not locate gfxstream patch application hook")
           p.write_text(s.replace(needle, insert, 1))
