@@ -79,6 +79,12 @@ jobs:
           #if defined(__ANDROID__)
           extern "C" VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL vkGetInstanceProcAddr(
               VkInstance instance, const char* pName);
+          extern "C" VKAPI_ATTR VkResult VKAPI_CALL vkCreateInstance(
+              const VkInstanceCreateInfo*, const VkAllocationCallbacks*, VkInstance*);
+          extern "C" VKAPI_ATTR VkResult VKAPI_CALL vkEnumerateInstanceExtensionProperties(
+              const char*, uint32_t*, VkExtensionProperties*);
+          extern "C" VKAPI_ATTR VkResult VKAPI_CALL vkEnumerateInstanceLayerProperties(
+              uint32_t*, VkLayerProperties*);
           #endif'''
           if 'extern "C" VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL vkGetInstanceProcAddr(' not in s:
               if decl_marker not in s:
@@ -99,21 +105,16 @@ jobs:
               s = s.replace(symbol, linked, 1)
 
           marker = "#endif" + chr(10) + "#ifdef VK_VERSION_1_1"
-          addition = """    // Resolve Vulkan global commands through the Android loader's
-              // linked GIPA entrypoint when they are not direct exports.
-              if (out->vkGetInstanceProcAddr) {
-                  if (!out->vkCreateInstance)
-                      out->vkCreateInstance = (PFN_vkCreateInstance)out->vkGetInstanceProcAddr(
-                          VK_NULL_HANDLE, "vkCreateInstance");
-                  if (!out->vkEnumerateInstanceExtensionProperties)
-                      out->vkEnumerateInstanceExtensionProperties =
-                          (PFN_vkEnumerateInstanceExtensionProperties)out->vkGetInstanceProcAddr(
-                              VK_NULL_HANDLE, "vkEnumerateInstanceExtensionProperties");
-                  if (!out->vkEnumerateInstanceLayerProperties)
-                      out->vkEnumerateInstanceLayerProperties =
-                          (PFN_vkEnumerateInstanceLayerProperties)out->vkGetInstanceProcAddr(
-                              VK_NULL_HANDLE, "vkEnumerateInstanceLayerProperties");
-              }
+          addition = """    // Android's loader exports the core global trampoline symbols.
+              // Use these direct imports: GIPA(NULL, name) is not returning
+              // these three global commands on this host image.
+          #if defined(__ANDROID__)
+              out->vkCreateInstance = ::vkCreateInstance;
+              out->vkEnumerateInstanceExtensionProperties =
+                  ::vkEnumerateInstanceExtensionProperties;
+              out->vkEnumerateInstanceLayerProperties =
+                  ::vkEnumerateInstanceLayerProperties;
+          #endif
           """
           if "Resolve Vulkan global commands through the Android loader's" not in s:
               if marker not in s:
@@ -130,7 +131,7 @@ jobs:
                   raise SystemExit("Could not find Android C++ link args in gfxstream build script")
               b = b.replace(old, new, 1)
               build.write_text(b)
-          print("Linked gfxstream backend to Android libvulkan and routed global dispatch through its GIPA")
+          print("Linked gfxstream backend to Android libvulkan global entrypoints")
           PY
           python3 - "$BUILD_SCRIPT" "$RUNNER_TEMP/patch_gfxstream.py" <<'PY'
           from pathlib import Path
