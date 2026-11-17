@@ -72,12 +72,8 @@ jobs:
           import sys
           p = Path(sys.argv[1])
           s = p.read_text()
-          marker = '''    out->vkGetPhysicalDeviceSparseImageFormatProperties =
-                (PFN_vkGetPhysicalDeviceSparseImageFormatProperties)dlSymFunc(
-                    lib, "vkGetPhysicalDeviceSparseImageFormatProperties");
-          '''
-          addition = ''' 
-              // Android's loader may expose global commands through GIPA only.
+          marker = "#endif\\n#ifdef VK_VERSION_1_1"
+          addition = """    // Android's loader may expose global commands through GIPA only.
               // Vulkan requires VK_NULL_HANDLE for global-command lookups.
               if (out->vkGetInstanceProcAddr) {
                   if (!out->vkCreateInstance)
@@ -92,12 +88,12 @@ jobs:
                           (PFN_vkEnumerateInstanceLayerProperties)out->vkGetInstanceProcAddr(
                               VK_NULL_HANDLE, "vkEnumerateInstanceLayerProperties");
               }
-          '''
+          """
           if "Android's loader may expose global commands through GIPA only." in s:
               raise SystemExit("GIPA fallback unexpectedly already present")
           if marker not in s:
-              raise SystemExit("Could not find exact gfxstream insertion point")
-          p.write_text(s.replace(marker, marker + addition, 1))
+              raise SystemExit("Could not find Vulkan version boundary in gfxstream source")
+          p.write_text(s.replace(marker, addition + "    #endif\\n#ifdef VK_VERSION_1_1", 1))
           print("Applied Android Vulkan GIPA fallback directly to pinned gfxstream source")
           PY
           python3 - "$BUILD_SCRIPT" "$RUNNER_TEMP/patch_gfxstream.py" <<'PY'
