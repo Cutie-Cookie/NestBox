@@ -233,6 +233,69 @@ jobs:
               hh = hh.replace(old_decl, new_decl, 1)
               common_h.write_text(hh)
 
+          # Carry the per-format external-memory capability into image
+          # creation/allocation. AHB-incompatible formats use ordinary
+          # VkDeviceMemory and are reported as non-shareable to the guest.
+          old_sig = """                                      Optional<ColorBufferInfo*> colorBufferInfo) {"""
+          new_sig = """                                      Optional<ColorBufferInfo*> colorBufferInfo,
+                                      bool allowExternalExport) {"""
+          if new_sig not in cc:
+              if old_sig not in cc:
+                  raise SystemExit("Could not find allocExternalMemory definition")
+              cc = cc.replace(old_sig, new_sig, 1)
+          old_export = """    if (mDeviceInfo.supportsExternalMemoryExport &&
+        getExternalMemoryMode() != ExternalMemory::Mode::HostAllocation) {"""
+          new_export = """    if (allowExternalExport && mDeviceInfo.supportsExternalMemoryExport &&
+        getExternalMemoryMode() != ExternalMemory::Mode::HostAllocation) {"""
+          if new_export not in cc:
+              if old_export not in cc:
+                  raise SystemExit("Could not find external allocation export condition")
+              cc = cc.replace(old_export, new_export, 1)
+          old_return = """    if (!mDeviceInfo.supportsExternalMemoryExport) {
+        return true;
+    }
+
+    uint32_t streamHandleType = 0;"""
+          new_return = """    if (!allowExternalExport || !mDeviceInfo.supportsExternalMemoryExport) {
+        return true;
+    }
+
+    uint32_t streamHandleType = 0;"""
+          if new_return not in cc:
+              if old_return not in cc:
+                  raise SystemExit("Could not find external allocation export return")
+              cc = cc.replace(old_return, new_return, 1)
+          old_format = """    const VkFormat vkFormat = *vkFormatOpt;
+
+    // Requesting invalid texture sizes"""
+          new_format = """    const VkFormat vkFormat = *vkFormatOpt;
+    const ImageSupportInfo* formatSupportInfo = mImageSupportInfo.GetSupportedInfo(vkFormat);
+    const bool imageSupportsExternalMemory =
+        formatSupportInfo && formatSupportInfo->supportsExternalMemory;
+
+    // Requesting invalid texture sizes"""
+          if new_format not in cc:
+              if old_format not in cc:
+                  raise SystemExit("Could not find color-buffer Vulkan format setup")
+              cc = cc.replace(old_format, new_format, 1)
+          old_image_ext = """    if (mDeviceInfo.supportsExternalMemoryExport || mDeviceInfo.supportsExternalMemoryImport) {"""
+          new_image_ext = """    if (imageSupportsExternalMemory &&
+        (mDeviceInfo.supportsExternalMemoryExport || mDeviceInfo.supportsExternalMemoryImport)) {"""
+          if new_image_ext not in cc:
+              if old_image_ext not in cc:
+                  raise SystemExit("Could not find color-buffer external image condition")
+              cc = cc.replace(old_image_ext, new_image_ext, 1)
+          old_alloc_call = """    bool allocRes = allocExternalMemory(vk, &infoPtr->memory,
+                                        deviceAlignment, kNullopt, dedicatedImage, infoPtr);"""
+          new_alloc_call = """    bool allocRes = allocExternalMemory(vk, &infoPtr->memory,
+                                        deviceAlignment, kNullopt, dedicatedImage, infoPtr,
+                                        imageSupportsExternalMemory);"""
+          if new_alloc_call not in cc:
+              if old_alloc_call not in cc:
+                  raise SystemExit("Could not find color-buffer external allocation call")
+              cc = cc.replace(old_alloc_call, new_alloc_call, 1)
+          common_cpp.write_text(cc)
+
           build = Path(sys.argv[2])
           b = build.read_text()
           old = "cpp_link_args = ['-Wl,-rpath,\\$ORIGIN']"
