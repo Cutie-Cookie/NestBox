@@ -10,7 +10,7 @@ VK_VERSION_1_0 global commands before validating the dispatch table.
 diff --git a/host/vulkan/cereal/common/goldfish_vk_dispatch.cpp b/host/vulkan/cereal/common/goldfish_vk_dispatch.cpp
 --- a/host/vulkan/cereal/common/goldfish_vk_dispatch.cpp
 +++ b/host/vulkan/cereal/common/goldfish_vk_dispatch.cpp
-@@ -258,18 +258,35 @@
+@@ -258,17 +258,34 @@
      out->vkGetInstanceProcAddr = (PFN_vkGetInstanceProcAddr)dlSymFunc(lib, "vkGetInstanceProcAddr");
      out->vkCreateDevice = (PFN_vkCreateDevice)dlSymFunc(lib, "vkCreateDevice");
      out->vkDestroyDevice = (PFN_vkDestroyDevice)dlSymFunc(lib, "vkDestroyDevice");
@@ -45,4 +45,3 @@ diff --git a/host/vulkan/cereal/common/goldfish_vk_dispatch.cpp b/host/vulkan/ce
 +                (PFN_vkEnumerateInstanceLayerProperties)out->vkGetInstanceProcAddr(
 +                    VK_NULL_HANDLE, "vkEnumerateInstanceLayerProperties");
 +    }
- #endif
