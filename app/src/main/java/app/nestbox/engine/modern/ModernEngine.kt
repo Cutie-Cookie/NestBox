@@ -409,9 +409,19 @@ class ModernEngine(
     /** Run a bounded host diagnostic command and keep its output in the boot report. */
     private fun runHostCommand(vararg args: String): String = runCatching {
         val process = ProcessBuilder(*args).redirectErrorStream(true).start()
-        val output = process.inputStream.use { it.readNBytes(2 * 1024 * 1024) }
+        val output = java.io.ByteArrayOutputStream()
+        process.inputStream.use { input ->
+            val buffer = ByteArray(8192)
+            var total = 0
+            while (total < 2 * 1024 * 1024) {
+                val count = input.read(buffer, 0, minOf(buffer.size, 2 * 1024 * 1024 - total))
+                if (count < 0) break
+                output.write(buffer, 0, count)
+                total += count
+            }
+        }
         if (!process.waitFor(8, java.util.concurrent.TimeUnit.SECONDS)) process.destroyForcibly()
-        String(output, Charsets.UTF_8)
+        String(output.toByteArray(), Charsets.UTF_8)
     }.getOrElse { "Could not run ${args.firstOrNull()}: ${it.message}" }
 
     private fun openDisplay() {
