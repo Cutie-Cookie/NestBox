@@ -387,6 +387,7 @@ class ModernEngine(
         texts["host-logcat.txt"] = runHostCommand("logcat", "-d", "-b", "all", "-v", "threadtime", "-t", "3000")
         texts["host-crash-logcat.txt"] = runHostCommand("logcat", "-d", "-b", "crash", "-v", "threadtime", "-t", "1000")
         texts["host-processes.txt"] = runHostCommand("ps", "-A", "-o", "PID,PPID,NAME,ARGS")
+        texts["host-exit-info.txt"] = runHostCommand("dumpsys", "activity", "exit-info", context.packageName)
         if (h != null) {
             runCatching { h.request("diag", v.id, timeoutMs = 15_000) }.getOrNull()?.let { texts["diag.txt"] = it.payload }
             // Guest logs are supplemental; host logs above are essential for host GPU-server crashes.
