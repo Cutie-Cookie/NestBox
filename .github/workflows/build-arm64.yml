@@ -214,19 +214,19 @@ jobs:
                   info->createFlags);
               return false;
           }
-      }
+                }
 
-      """
+                        """
               cc = cc[:fail_start] + replacement + cc[supported_pos:]
               common_cpp.write_text(cc)
 
           common_h = Path(sys.argv[5])
           hh = common_h.read_text()
           old_decl = """        gfxstream::base::Optional<VkImage> imageForDedicatedAllocation = gfxstream::base::kNullopt,
-        gfxstream::base::Optional<ColorBufferInfo*> colorBufferInfo = gfxstream::base::kNullopt);"""
+                  gfxstream::base::Optional<ColorBufferInfo*> colorBufferInfo = gfxstream::base::kNullopt);"""
           new_decl = """        gfxstream::base::Optional<VkImage> imageForDedicatedAllocation = gfxstream::base::kNullopt,
-        gfxstream::base::Optional<ColorBufferInfo*> colorBufferInfo = gfxstream::base::kNullopt,
-        bool allowExternalExport = true);"""
+                  gfxstream::base::Optional<ColorBufferInfo*> colorBufferInfo = gfxstream::base::kNullopt,
+                  bool allowExternalExport = true);"""
           if new_decl not in hh:
               if old_decl not in hh:
                   raise SystemExit("Could not find allocExternalMemory declaration")
@@ -244,43 +244,43 @@ jobs:
                   raise SystemExit("Could not find allocExternalMemory definition")
               cc = cc.replace(old_sig, new_sig, 1)
           old_export = """    if (mDeviceInfo.supportsExternalMemoryExport &&
-        getExternalMemoryMode() != ExternalMemory::Mode::HostAllocation) {"""
+                  getExternalMemoryMode() != ExternalMemory::Mode::HostAllocation) {"""
           new_export = """    if (allowExternalExport && mDeviceInfo.supportsExternalMemoryExport &&
-        getExternalMemoryMode() != ExternalMemory::Mode::HostAllocation) {"""
+                  getExternalMemoryMode() != ExternalMemory::Mode::HostAllocation) {"""
           if new_export not in cc:
               if old_export not in cc:
                   raise SystemExit("Could not find external allocation export condition")
               cc = cc.replace(old_export, new_export, 1)
           old_return = """    if (!mDeviceInfo.supportsExternalMemoryExport) {
-        return true;
-    }
+                  return true;
+              }
 
-    uint32_t streamHandleType = 0;"""
+              uint32_t streamHandleType = 0;"""
           new_return = """    if (!allowExternalExport || !mDeviceInfo.supportsExternalMemoryExport) {
-        return true;
-    }
+                  return true;
+              }
 
-    uint32_t streamHandleType = 0;"""
+              uint32_t streamHandleType = 0;"""
           if new_return not in cc:
               if old_return not in cc:
                   raise SystemExit("Could not find external allocation export return")
               cc = cc.replace(old_return, new_return, 1)
           old_format = """    const VkFormat vkFormat = *vkFormatOpt;
 
-    // Requesting invalid texture sizes"""
+              // Requesting invalid texture sizes"""
           new_format = """    const VkFormat vkFormat = *vkFormatOpt;
-    const ImageSupportInfo* formatSupportInfo = mImageSupportInfo.GetSupportedInfo(vkFormat);
-    const bool imageSupportsExternalMemory =
-        formatSupportInfo && formatSupportInfo->supportsExternalMemory;
+              const ImageSupportInfo* formatSupportInfo = mImageSupportInfo.GetSupportedInfo(vkFormat);
+              const bool imageSupportsExternalMemory =
+                  formatSupportInfo && formatSupportInfo->supportsExternalMemory;
 
-    // Requesting invalid texture sizes"""
+              // Requesting invalid texture sizes"""
           if new_format not in cc:
               if old_format not in cc:
                   raise SystemExit("Could not find color-buffer Vulkan format setup")
               cc = cc.replace(old_format, new_format, 1)
           old_image_ext = """    if (mDeviceInfo.supportsExternalMemoryExport || mDeviceInfo.supportsExternalMemoryImport) {"""
           new_image_ext = """    if (imageSupportsExternalMemory &&
-        (mDeviceInfo.supportsExternalMemoryExport || mDeviceInfo.supportsExternalMemoryImport)) {"""
+                  (mDeviceInfo.supportsExternalMemoryExport || mDeviceInfo.supportsExternalMemoryImport)) {"""
           if new_image_ext not in cc:
               if old_image_ext not in cc:
                   raise SystemExit("Could not find color-buffer external image condition")
