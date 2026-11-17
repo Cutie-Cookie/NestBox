@@ -285,15 +285,13 @@ jobs:
               if old_image_ext not in cc:
                   raise SystemExit("Could not find color-buffer external image condition")
               cc = cc.replace(old_image_ext, new_image_ext, 1)
-          old_alloc_call = """    bool allocRes = allocExternalMemory(vk, &infoPtr->memory,
-                                        deviceAlignment, kNullopt, dedicatedImage, infoPtr);"""
-          new_alloc_call = """    bool allocRes = allocExternalMemory(vk, &infoPtr->memory,
+          alloc_pattern = r'    bool allocRes = allocExternalMemory\\(vk, &infoPtr->memory,\\s*deviceAlignment, kNullopt, dedicatedImage, infoPtr\\);'
+          alloc_replacement = """    bool allocRes = allocExternalMemory(vk, &infoPtr->memory,
                                         deviceAlignment, kNullopt, dedicatedImage, infoPtr,
                                         imageSupportsExternalMemory);"""
-          if new_alloc_call not in cc:
-              if old_alloc_call not in cc:
-                  raise SystemExit("Could not find color-buffer external allocation call")
-              cc = cc.replace(old_alloc_call, new_alloc_call, 1)
+          cc, alloc_count = re.subn(alloc_pattern, alloc_replacement, cc, count=1)
+          if alloc_count == 0 and "imageSupportsExternalMemory);" not in cc:
+              raise SystemExit("Could not find color-buffer external allocation call")
           common_cpp.write_text(cc)
 
           build = Path(sys.argv[2])
