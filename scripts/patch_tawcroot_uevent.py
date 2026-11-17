@@ -41,6 +41,7 @@ static long ensure_uevent_setsockopt_filter(void)
     static int ready;
     while (__atomic_exchange_n(&lock, 1, __ATOMIC_ACQUIRE)) {}
     long result = 0;
+    if (tawcroot_namespace.session & TAWC_NS_FAKE_NET) ready = 1;
     if (!ready) {
         const int lazy[] = { TAWC_SYS_setsockopt };
         result = tawcroot_install_lazy_filter(lazy, 1);
