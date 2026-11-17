@@ -382,9 +382,14 @@ class ModernEngine(
             appendLine("GPU acceleration: ${settings.gpuAcceleration}")
             appendLine("Failure: $message")
         }
+        // Capture the HOST Android log before stopping the helper. The GPU server is a host-side
+        // process, so guest logcat cannot explain an abort that happens before Android boots.
+        texts["host-logcat.txt"] = runHostCommand("logcat", "-d", "-b", "all", "-v", "threadtime", "-t", "3000")
+        texts["host-crash-logcat.txt"] = runHostCommand("logcat", "-d", "-b", "crash", "-v", "threadtime", "-t", "1000")
+        texts["host-processes.txt"] = runHostCommand("ps", "-A", "-o", "PID,PPID,NAME,ARGS")
         if (h != null) {
             runCatching { h.request("diag", v.id, timeoutMs = 15_000) }.getOrNull()?.let { texts["diag.txt"] = it.payload }
-            // The guest's own logcat explains crashes; it works as long as the guest's logd is up.
+            // Guest logs are supplemental; host logs above are essential for host GPU-server crashes.
             runCatching { h.request("exec", v.id, "15000", "logcat", "-d", "-b", "all", timeoutMs = 20_000) }.getOrNull()
                 ?.let { texts["guest-logcat.txt"] = it.payload }
             texts["engine-stderr.txt"] = h.stderrTail()
@@ -400,6 +405,14 @@ class ModernEngine(
             ),
         )
     }
+
+    /** Run a bounded host diagnostic command and keep its output in the boot report. */
+    private fun runHostCommand(vararg args: String): String = runCatching {
+        val process = ProcessBuilder(*args).redirectErrorStream(true).start()
+        val output = process.inputStream.use { it.readNBytes(2 * 1024 * 1024) }
+        if (!process.waitFor(8, java.util.concurrent.TimeUnit.SECONDS)) process.destroyForcibly()
+        String(output, Charsets.UTF_8)
+    }.getOrElse { "Could not run ${args.firstOrNull()}: ${it.message}" }
 
     private fun openDisplay() {
         val v = vm ?: return
