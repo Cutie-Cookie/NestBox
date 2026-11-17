@@ -1,10 +1,6 @@
 name: Build NestBox ARM64 APK
 
 on:
-  push:
-    branches:
-      - bypass-process-limit-check
-      - complete-original-apk-diagnostics
   workflow_dispatch:
 
 permissions:
@@ -98,6 +94,9 @@ jobs:
 
       - name: Restore original APK-only components and re-sign
         shell: bash
+        env:
+          NESTBOX_KEYSTORE_BASE64: ${{ secrets.NESTBOX_KEYSTORE_BASE64 }}
+          NESTBOX_KEYSTORE_PASSWORD: ${{ secrets.NESTBOX_KEYSTORE_PASSWORD }}
         run: |
           set -euo pipefail
           APK="app/build/outputs/apk/debug/app-debug.apk"
@@ -116,15 +115,16 @@ jobs:
           # Rebuild the old final DEX after removing class definitions already supplied by the current build.
           python3 -I scripts/merge_original_apk.py "$ORIGINAL" "$APK" "$BAKSMALI" "$SMALI"
           "$ANDROID_HOME/build-tools/35.0.0/zipalign" -f 4 "$APK" "$RUNNER_TEMP/app-aligned.apk"
-          keytool -genkeypair -noprompt \
-            -keystore "$RUNNER_TEMP/NestBox-debug.keystore" \
-            -storepass android -keypass android -alias androiddebugkey \
-            -keyalg RSA -keysize 2048 -validity 10000 \
-            -dname "CN=Android Debug,O=Android,C=US"
+          : "${NESTBOX_KEYSTORE_BASE64:?Missing GitHub secret NESTBOX_KEYSTORE_BASE64}"
+          : "${NESTBOX_KEYSTORE_PASSWORD:?Missing GitHub secret NESTBOX_KEYSTORE_PASSWORD}"
+          printf '%s' "$NESTBOX_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/NestBox-release.p12"
+          test -s "$RUNNER_TEMP/NestBox-release.p12"
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign \
-            --ks "$RUNNER_TEMP/NestBox-debug.keystore" \
-            --ks-key-alias androiddebugkey \
-            --ks-pass pass:android --key-pass pass:android \
+            --ks "$RUNNER_TEMP/NestBox-release.p12" \
+            --ks-type PKCS12 \
+            --ks-key-alias nestbox-release \
+            --ks-pass env:NESTBOX_KEYSTORE_PASSWORD \
+            --key-pass env:NESTBOX_KEYSTORE_PASSWORD \
             --out "$RUNNER_TEMP/app-signed.apk" "$RUNNER_TEMP/app-aligned.apk"
           mv "$RUNNER_TEMP/app-signed.apk" "$APK"
 
@@ -135,6 +135,11 @@ jobs:
           APK="app/build/outputs/apk/debug/app-debug.apk"
           test -s "$APK"
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$APK"
+          CERTS="$("$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs "$APK")"
+          grep -Fqi "1d:d1:cf:b8:84:6e:f3:dd:b4:39:c1:c8:b2:32:f2:c4:0f:90:75:f5:83:63:2c:c8:d8:23:5c:20:c0:9c:6b:c4" <<< "$CERTS" || {
+            echo "::error::APK was not signed with the permanent NestBox release key"
+            exit 1
+          }
           BADGING="$("$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK")"
           grep -Fq "package: name='app.nbox'" <<< "$BADGING"
           grep -Fq "sdkVersion:'29'" <<< "$BADGING"
