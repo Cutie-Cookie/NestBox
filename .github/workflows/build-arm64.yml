@@ -120,6 +120,40 @@ jobs:
               if marker not in s:
                   raise SystemExit("Could not find Vulkan version boundary in gfxstream source")
               s = s.replace(marker, addition + "    #endif" + chr(10) + "#ifdef VK_VERSION_1_1", 1)
+          # The instance initializer clears its output table and then asks
+          # vkGetInstanceProcAddr(instance, ...) for global commands. Android's
+          # loader may return null for these three global entry points there.
+          # Preserve the already-resolved system-loader pointers instead.
+          instance_start = s.index("void init_vulkan_dispatch_from_instance(")
+          instance_end = s.index("void init_vulkan_dispatch_from_device(", instance_start)
+          instance = s[instance_start:instance_end]
+          replacements = (
+              (
+                  '''    out->vkCreateInstance =
+                      (PFN_vkCreateInstance)vk->vkGetInstanceProcAddr(instance, "vkCreateInstance");''',
+                  '''    out->vkCreateInstance = vk->vkCreateInstance;''',
+              ),
+              (
+                  '''    out->vkEnumerateInstanceExtensionProperties =
+                      (PFN_vkEnumerateInstanceExtensionProperties)vk->vkGetInstanceProcAddr(
+                          instance, "vkEnumerateInstanceExtensionProperties");''',
+                  '''    out->vkEnumerateInstanceExtensionProperties =
+                      vk->vkEnumerateInstanceExtensionProperties;''',
+              ),
+              (
+                  '''    out->vkEnumerateInstanceLayerProperties =
+                      (PFN_vkEnumerateInstanceLayerProperties)vk->vkGetInstanceProcAddr(
+                          instance, "vkEnumerateInstanceLayerProperties");''',
+                  '''    out->vkEnumerateInstanceLayerProperties =
+                      vk->vkEnumerateInstanceLayerProperties;''',
+              ),
+          )
+          for old, new in replacements:
+              if old in instance:
+                  instance = instance.replace(old, new, 1)
+              elif new not in instance:
+                  raise SystemExit("Expected Android global Vulkan dispatch assignment not found")
+          s = s[:instance_start] + instance + s[instance_end:]
           dispatch.write_text(s)
 
           build = Path(sys.argv[2])
