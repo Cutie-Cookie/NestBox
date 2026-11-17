@@ -21,6 +21,7 @@ PY="$(command -v python3 || command -v python)"
 grep -q nb_drop_dead_fds "$SRC/src/syscalls_fd.c" || "$PY" -I "$HERE/patch_tawcroot.py" "$SRC/src/syscalls_fd.c"
 "$PY" -I "$HERE/patch_tawcroot_uevent.py" "$SRC/src/syscalls_socket.c"
 "$PY" -I "$HERE/patch_tawcroot_fd_floor.py" "$SRC/include/fdtab.h"
+echo "tawcroot guest datagram socket floor: $(grep TAWCROOT_RESERVED_FD_BASE "$SRC/include/fdtab.h" | head -1)"
 
 SOURCES=(sysv_sem sysv_shm proc_tcp namespace cgroup mounts uts netemu blocking ports main io strings
   filter filter_build handler dispatch rescue path path_scratch path_fold path_orchestrate path_resolve
