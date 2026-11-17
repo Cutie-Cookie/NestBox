@@ -22,7 +22,8 @@ BIN="$NDK/toolchains/llvm/prebuilt/windows-x86_64/bin"
 [ -d "$BIN" ] || BIN="$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin"
 PY="$(command -v python3 || command -v python)"
 
-"$PY" -I "$HERE/patch_helper.py" "$SRC/rootless"\n"$PY" -I "$HERE/patch_rootless_copy.py" "$SRC/rootless/rootless_prep.cpp" # verified sequential guest-file copy
+"$PY" -I "$HERE/patch_helper.py" "$SRC/rootless"
+"$PY" -I "$HERE/patch_rootless_copy.py" "$SRC/rootless/rootless_prep.cpp"
 "$PY" -I "$HERE/patch_rootless_diagnostics.py" "$SRC/rootless/rootless_instance.cpp"
 "$CMAKE" -S "$SRC" -B "$OUT" -G Ninja -DCMAKE_MAKE_PROGRAM="$NINJA" \
   -DCMAKE_TOOLCHAIN_FILE="$NDK/build/cmake/android.toolchain.cmake" \
