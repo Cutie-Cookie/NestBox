@@ -149,6 +149,8 @@ jobs:
               ),
           )
           for old, new in replacements:
+              old = "\\n".join(line if i == 0 else line[14:] for i, line in enumerate(old.splitlines()))
+              new = "\\n".join(line if i == 0 else line[14:] for i, line in enumerate(new.splitlines()))
               if old in instance:
                   instance = instance.replace(old, new, 1)
               elif new not in instance:
