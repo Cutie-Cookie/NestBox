@@ -61,12 +61,57 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          PATCH="$GITHUB_WORKSPACE/scripts/patches/04-android-vulkan-global-fallback.patch"
           PATCH_DIR="$WAYON_SOURCE/deps/gfxstream-patches/gfxstream"
-          test -s "$PATCH"
+          BUILD_SCRIPT="$WAYON_SOURCE/scripts/gpu/build-gfxstream-backend.sh"
           test -d "$PATCH_DIR"
-          cp "$PATCH" "$PATCH_DIR/04-android-vulkan-global-fallback.patch"
-          bash "$WAYON_SOURCE/scripts/gpu/build-gfxstream-backend.sh" --abi=aarch64
+          # Do not route this small source edit through dep_apply_patches:
+          # patch(1) has repeatedly rejected an otherwise exact hunk.
+          rm -f "$PATCH_DIR/04-android-vulkan-global-fallback.patch"
+          cat > "$RUNNER_TEMP/patch_gfxstream.py" <<'PY'
+          from pathlib import Path
+          import sys
+          p = Path(sys.argv[1])
+          s = p.read_text()
+          marker = '''    out->vkGetPhysicalDeviceSparseImageFormatProperties =
+                (PFN_vkGetPhysicalDeviceSparseImageFormatProperties)dlSymFunc(
+                    lib, "vkGetPhysicalDeviceSparseImageFormatProperties");
+          '''
+          addition = ''' 
+              // Android's loader may expose global commands through GIPA only.
+              // Vulkan requires VK_NULL_HANDLE for global-command lookups.
+              if (out->vkGetInstanceProcAddr) {
+                  if (!out->vkCreateInstance)
+                      out->vkCreateInstance = (PFN_vkCreateInstance)out->vkGetInstanceProcAddr(
+                          VK_NULL_HANDLE, "vkCreateInstance");
+                  if (!out->vkEnumerateInstanceExtensionProperties)
+                      out->vkEnumerateInstanceExtensionProperties =
+                          (PFN_vkEnumerateInstanceExtensionProperties)out->vkGetInstanceProcAddr(
+                              VK_NULL_HANDLE, "vkEnumerateInstanceExtensionProperties");
+                  if (!out->vkEnumerateInstanceLayerProperties)
+                      out->vkEnumerateInstanceLayerProperties =
+                          (PFN_vkEnumerateInstanceLayerProperties)out->vkGetInstanceProcAddr(
+                              VK_NULL_HANDLE, "vkEnumerateInstanceLayerProperties");
+              }
+          '''
+          if "Android's loader may expose global commands through GIPA only." in s:
+              raise SystemExit("GIPA fallback unexpectedly already present")
+          if marker not in s:
+              raise SystemExit("Could not find exact gfxstream insertion point")
+          p.write_text(s.replace(marker, marker + addition, 1))
+          print("Applied Android Vulkan GIPA fallback directly to pinned gfxstream source")
+          PY
+          python3 - "$BUILD_SCRIPT" "$RUNNER_TEMP/patch_gfxstream.py" <<'PY'
+          from pathlib import Path
+          import sys
+          p = Path(sys.argv[1])
+          s = p.read_text()
+          needle = 'dep_apply_patches gfxstream "$PATCH_DIR"\\n'
+          insert = needle + 'python3 "' + sys.argv[2] + '" "$GFXSTREAM_DIR/host/vulkan/cereal/common/goldfish_vk_dispatch.cpp"\\n'
+          if needle not in s:
+              raise SystemExit("Could not locate gfxstream patch application hook")
+          p.write_text(s.replace(needle, insert, 1))
+          PY
+          bash "$BUILD_SCRIPT" --abi=aarch64
           SOURCE_LIB="$WAYON_SOURCE/app/src/main/jniLibs/arm64-v8a"
           TARGET_LIB="$GITHUB_WORKSPACE/app/src/main/jniLibs/arm64-v8a"
           test -s "$SOURCE_LIB/libgfxstream_backend.so"
