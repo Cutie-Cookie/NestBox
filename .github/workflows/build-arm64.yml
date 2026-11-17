@@ -149,6 +149,21 @@ jobs:
           s = s[:instance_start] + instance + s[instance_end:]
           dispatch.write_text(s)
 
+          # Avoid requesting mutable AHB images for single/dual-channel
+          # UNORM formats. R8 has no required sRGB view in this path, and
+          # R16 has no sRGB variant; Mali rejects the mutable AHB query.
+          format_support = Path(sys.argv[3])
+          fs = format_support.read_text()
+          for old_format, new_format in (
+              ("{VK_FORMAT_R8_UNORM,\\n         VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT | VK_IMAGE_CREATE_EXTENDED_USAGE_BIT},", "{VK_FORMAT_R8_UNORM},"),
+              ("{VK_FORMAT_R16_UNORM,\\n         VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT | VK_IMAGE_CREATE_EXTENDED_USAGE_BIT},", "{VK_FORMAT_R16_UNORM},"),
+          ):
+              if new_format not in fs:
+                  if old_format not in fs:
+                      raise SystemExit("Expected R8/R16 Vulkan image flags not found")
+                  fs = fs.replace(old_format, new_format, 1)
+          format_support.write_text(fs)
+
           build = Path(sys.argv[2])
           b = build.read_text()
           old = "cpp_link_args = ['-Wl,-rpath,\\$ORIGIN']"
@@ -158,7 +173,7 @@ jobs:
                   raise SystemExit("Could not find Android C++ link args in gfxstream build script")
               b = b.replace(old, new, 1)
               build.write_text(b)
-          print("Linked gfxstream backend to Android libvulkan global entrypoints")
+          print("Patched R8/R16 AHB format flags and linked Android Vulkan loader")
           PY
           python3 - "$BUILD_SCRIPT" "$RUNNER_TEMP/patch_gfxstream.py" <<'PY'
           from pathlib import Path
@@ -166,7 +181,7 @@ jobs:
           p = Path(sys.argv[1])
           s = p.read_text()
           needle = 'dep_apply_patches gfxstream "$PATCH_DIR"\n'
-          insert = needle + 'python3 "' + sys.argv[2] + '" "$GFXSTREAM_DIR/host/vulkan/cereal/common/goldfish_vk_dispatch.cpp" "$0"\n'
+          insert = needle + 'python3 "' + sys.argv[2] + '" "$GFXSTREAM_DIR/host/vulkan/cereal/common/goldfish_vk_dispatch.cpp" "$0" "$GFXSTREAM_DIR/host/vulkan/vk_format_support.cpp"\n'
           if needle not in s:
               raise SystemExit("Could not locate gfxstream patch application hook")
           p.write_text(s.replace(needle, insert, 1))
