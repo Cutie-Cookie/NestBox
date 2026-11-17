@@ -137,8 +137,8 @@ jobs:
           import sys
           p = Path(sys.argv[1])
           s = p.read_text()
-          needle = 'dep_apply_patches gfxstream "$PATCH_DIR"\\n'
-          insert = needle + 'python3 "' + sys.argv[2] + '" "$GFXSTREAM_DIR/host/vulkan/cereal/common/goldfish_vk_dispatch.cpp" "$BUILD_SCRIPT"\\n'
+          needle = 'dep_apply_patches gfxstream "$PATCH_DIR"\n'
+          insert = needle + 'python3 "' + sys.argv[2] + '" "$GFXSTREAM_DIR/host/vulkan/cereal/common/goldfish_vk_dispatch.cpp" "$BUILD_SCRIPT"\n'
           if needle not in s:
               raise SystemExit("Could not locate gfxstream patch application hook")
           p.write_text(s.replace(needle, insert, 1))
