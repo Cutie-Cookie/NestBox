@@ -285,7 +285,7 @@ jobs:
               if old_image_ext not in cc:
                   raise SystemExit("Could not find color-buffer external image condition")
               cc = cc.replace(old_image_ext, new_image_ext, 1)
-          alloc_pattern = r'    bool allocRes = allocExternalMemory\\(vk, &infoPtr->memory,\\s*deviceAlignment, kNullopt, dedicatedImage, infoPtr\\);'
+          alloc_pattern = r'    bool allocRes = allocExternalMemory\(vk, &infoPtr->memory,\s*deviceAlignment, kNullopt, dedicatedImage, infoPtr\);'
           alloc_replacement = """    bool allocRes = allocExternalMemory(vk, &infoPtr->memory,
                                         deviceAlignment, kNullopt, dedicatedImage, infoPtr,
                                         imageSupportsExternalMemory);"""
