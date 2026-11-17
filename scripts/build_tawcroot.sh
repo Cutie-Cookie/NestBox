@@ -4,7 +4,7 @@
 #
 # Usage: scripts/build_tawcroot.sh <wayondroid-source-dir> <ndk-dir>
 #   source: https://codeload.github.com/yoro1836/wayondroid/tar.gz/a45f80b (the bundled build)
-#   patches: scripts/patch_tawcroot.py and scripts/patch_tawcroot_uevent.py
+#   patches: scripts/patch_tawcroot.py, patch_tawcroot_exec_cloexec.py and patch_tawcroot_uevent.py
 set -euo pipefail
 
 SRC="$1/tawcroot"
@@ -20,6 +20,7 @@ CC=("$BIN/clang" --target=aarch64-linux-android29)
 PY="$(command -v python3 || command -v python)"
 grep -q nb_drop_dead_fds "$SRC/src/syscalls_fd.c" || "$PY" -I "$HERE/patch_tawcroot.py" "$SRC/src/syscalls_fd.c"
 "$PY" -I "$HERE/patch_tawcroot_uevent.py" "$SRC/src/syscalls_socket.c"
+"$PY" -I "$HERE/patch_tawcroot_exec_cloexec.py" "$SRC/src/loader_exec.c"
 
 SOURCES=(sysv_sem sysv_shm proc_tcp namespace cgroup mounts uts netemu blocking ports main io strings
   filter filter_build handler dispatch rescue path path_scratch path_fold path_orchestrate path_resolve
