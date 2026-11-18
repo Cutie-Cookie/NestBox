@@ -33,3 +33,10 @@ Where possible, obtain these through diagnostics without asking the user to chan
 8. App-UID access to required device nodes and sync primitives; never assume root access.
 
 Do not request IMEI, serial number, or account details.
+
+
+## 2026-11-18 — Host virtual RAM and responsiveness note
+- User reports virtual RAM enabled on the phone appears to improve ROM/NestBox responsiveness.
+- Configured virtual RAM amount and implementation details have not been recorded.
+- Possible mechanism: host memory pressure relief / fewer background process evictions. Virtual RAM is storage-backed and much slower than physical memory; it does not directly add RAM to the NestBox guest or GPU capacity.
+- Subjective performance note only; no benchmark or controlled comparison yet.
