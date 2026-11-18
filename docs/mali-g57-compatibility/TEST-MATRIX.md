@@ -41,3 +41,16 @@ For every APK:
   1dd1cfb8846ef3ddb439c1c8b232f2c40f9075f583632cc8d8235c20c09c6bc4
 - [ ] APK SHA-256 recorded.
 - [ ] Build number and patch summary recorded.
+
+
+## T5 — Build #61 initial user report (2026-11-18)
+- [x] Build #61 opened normally and reached Android home (user report).
+- [x] GPU server did not exit during startup (user report).
+- [ ] Diagnostics archive/logs received and examined.
+- [ ] Confirm GPU acceleration is actually rendering guest frames rather than partial/software fallback.
+- [ ] Confirm sustained compositor/Wayland frame production.
+- [ ] Confirm R8/R16 non-external fallback log appears as expected.
+- [ ] Confirm no new fatal host crash through a longer use session.
+- [ ] Obtain comparative performance measurements (not currently available).
+
+**Initial classification:** Promising partial validation only. Startup appears fixed, but without Test5 diagnostics and sustained rendering evidence this is not yet a full acceptance pass.
