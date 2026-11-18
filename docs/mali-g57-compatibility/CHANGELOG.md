@@ -1,33 +1,29 @@
-# Append-only change and experiment log
 
-Record all changes, including documentation-only edits, build-script changes, failed patch attempts, reverted changes, commands, test reports, decisions, and builds. Newest entries go at the bottom. Never erase an unsuccessful experiment; mark it superseded.
 
-## 2026-11-17 — Investigation opened
+## 2026-11-18 — User-reported Build #61 startup success (initial Test5 observation)
 
-### Repository / branch
-- Repository: Cutie-Cookie/NestBox
-- Branch: mali-g57-compatibility
-- Base commit: 453f5cfb7d8c16e611742051200d93d3b5b9855e (Build #61)
-- Purpose: isolate Mali-G57 compatibility research and future targeted changes from the existing diagnostics branch.
+### Device result
+- User installed Build #61 as an app update and tested the existing ROM/machine; no ROM reinstall or machine recreation was reported.
+- NestBox opened normally and the guest reached Android's home screen.
+- User reports no GPU-server exit/crash during this successful startup.
+- User reports the guest is still a little laggy, but the lag is barely noticeable.
+- User attributes possible lag partly to the current low-performance configuration and multiple apps running in the phone's background; these are plausible factors, not measured causes.
 
-### Initial evidence reviewed
-- Test4 diagnostics identify host Vulkan device as Mali-G57, Vulkan 1.3.225.
-- Gfxstream selected AndroidAHB external-memory mode.
-- Fatal operation: 4x4 VK_FORMAT_R8_UNORM ColorBuffer creation; driver reported unsupported format / memory type and process aborted.
-- Previous Vulkan global dispatch and mDNS FD_SET fixes remain in the base.
-- Build #61 adds a narrow R8/R16 non-AHB fallback; device-side validation is pending.
+### Interpretation / limits
+- This is a meaningful positive result and supports that Build #61's targeted R8/R16 fallback may have avoided the Test4 startup abort.
+- The result is currently user-reported behavior only. No Test5 diagnostics archive or log confirmation has been received yet.
+- Normal boot and GPU-server survival do not alone prove that all guest graphics are hardware-rendered or that acceleration/performance is fully correct.
+- Do not claim a completed GPU compatibility pass, sustained frame rendering, or benchmark improvement until diagnostics and/or a sustained graphics test confirm them.
+- Keep Build #61 as the working baseline. Do not ask the user to reinstall the ROM, recreate the machine, wipe data, or change phone settings for this observation.
 
-### Research notes
-- PanVK is a possible alternative Vulkan implementation for Mali.
-- Experimental panvk-kbase work has distinct backend generations and Android integration requirements; a CSF-oriented G615 profile cannot be assumed to work on T606 Mali-G57 MP1.
-- Exact JM UAPI, Android WSI, AHardwareBuffer/gralloc sharing, and driver loading remain unverified.
-- Decision: test Build #61 before changing renderer architecture.
+### Virtual RAM / host memory observation
+- User noticed that enabling virtual RAM on the phone appears to make ROMs/NestBox feel faster or smoother.
+- Amount of virtual RAM enabled is unknown; this is a subjective observation, not a benchmark.
+- Possible explanation: storage-backed swap can reduce host memory pressure and help background apps/processes remain resident, but it is far slower than physical RAM and does not increase NestBox guest-assigned RAM or GPU capability. Improvement may depend on workload and device swap implementation.
+- Treat this as a performance observation to revisit during later controlled comparisons, not as established causation.
 
-### Changes made in this entry
-- Added docs/mali-g57-compatibility/ as the dedicated investigation folder.
-- Added README, device profile, findings, plan, test matrix, and append-only changelog.
-- No application source, build workflow, dependency, renderer, or APK changes made on this branch.
-- No build triggered.
-
-### Next action
-Wait for user's Test5 report from Build #61. Append complete result and proceed according to PLAN.md.
+### Updated next steps
+1. Keep Build #61 installed and use it normally; collect diagnostics only if/when convenient or if a problem occurs.
+2. If diagnostics become available, verify fallback log, GPU-server process, Wayland/compositor frame count, and whether actual Mali rendering is used.
+3. Avoid changing multiple variables (performance profile, background apps, virtual RAM, resolution) at once; if comparing performance, record conditions first.
+4. Continue targeted Mali-G57 compatibility work after the current baseline is documented and verified; PanVK remains a separate research path, not a promised performance upgrade.
