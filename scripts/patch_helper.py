@@ -29,7 +29,7 @@ if "nb_apply_overlay" in s:
 # extracted system-as-root image. Sanitize that file too, or init still sees
 # ro.product.cpu.abilist32 and starts the 32-bit BoringSSL self-test.
 old_paths = 'for (const char* f : {"/system/build.prop", "/vendor/build.prop", "/vendor/odm/etc/build.prop"}) {'
-new_paths = 'for (const char* f : {"/system/build.prop", "/system/product/etc/build.prop", "/vendor/build.prop", "/vendor/odm/etc/build.prop"}) {'
+new_paths = 'for (const char* f : {"/system/build.prop", "/system/product/etc/build.prop", "/product/etc/build.prop", "/vendor/build.prop", "/vendor/odm/etc/build.prop"}) {'
 if new_paths not in s:
     if old_paths not in s:
         raise SystemExit("64-bit-only property rewrite loop not found; refusing to patch")
@@ -120,7 +120,7 @@ bool nb_apply_overlay(const Layout& l, std::string* error) {
         }
     }
     const std::string props = read_file(l.instance + "/nestbox.prop").value_or("");
-    const std::string prop = R + "/system/product/etc/build.prop";
+    const std::string prop = R + "/product/etc/build.prop";
     std::string text = read_file(prop).value_or("");
     const size_t b = text.find("\n# nestbox-begin");
     if (b != std::string::npos) {
