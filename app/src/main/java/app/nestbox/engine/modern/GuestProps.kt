@@ -50,7 +50,15 @@ object GuestProps {
         assets: android.content.res.AssetManager,
     ) {
         guest.mkdirs()
-        val props = (if (lowMemory) LOW_MEMORY else emptyList()) + rom.props + Spoof.bootProps(vm.spoof)
+        // Rootless host graphics lack a vendor EGL implementation in the guest.
+        // Use Waydroid's software-rendering fallback; retain the composer/HWC.
+        val ROOTLESS_SOFTWARE_GRAPHICS = listOf(
+            "ro.hardware.gralloc=default",
+            "ro.hardware.egl=swiftshader",
+            "ro.opengles.version=196608",
+        )
+        val props = (if (lowMemory) LOW_MEMORY else emptyList()) +
+            rom.props + ROOTLESS_SOFTWARE_GRAPHICS + Spoof.bootProps(vm.spoof)
         File(guest, "nestbox.prop").writeText(props.joinToString(NL, postfix = NL))
         val remove = rom.remove + (if (vm.root) emptyList() else listOf(SU))
         File(guest, "nestbox.remove").writeText(remove.joinToString(NL, postfix = NL))
