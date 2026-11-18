@@ -124,3 +124,16 @@ The prior correction wrote `ro.product.cpu.abilist32=` (an empty property value)
 
 ### Remaining validation
 This is still a test candidate, not a proven boot fix. The only decisive next check is runtime testing on the Android 11 guest in the user's device/ROM. Record whether the guest proceeds past the `boringssl_self_test32` init trigger and whether a new failure appears.
+
+### CI verifier follow-up
+
+Build #35 failed during the pre-package native ELF architecture check on `libvine_helper.so`. The same helper artifact in Build #34 was confirmed locally as an AArch64 ELF, and Build #36 reran successfully. The verifier was changed to capture `llvm-readelf -h` output and print it on failure, rather than piping directly to quiet grep and losing diagnostic context.
+
+Build **#37** then completed successfully with the revised verifier. Its APK was inspected locally:
+- **79,698,460 bytes**, **286 entry paths**.
+- APK SHA-256: `085db0b9bc591fa1abaeed2d89fab1290d6505b16a3dc6281ecea9f1449b84c3`.
+- Entry-path set matches Build #34 exactly.
+- Only the helper binary and APK signing metadata differ from Build #34, as expected from a rebuild and re-sign.
+- Workflow step for required native-library architecture checks passed, as did final APK signature verification.
+
+The quiet-pipeline failure's precise cause is **not proven**; the diagnostic change improves failure reporting, and the subsequent build passes.
