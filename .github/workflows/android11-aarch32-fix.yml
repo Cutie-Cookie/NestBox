@@ -1,6 +1,9 @@
 name: Android APK (AArch32 fix)
 
 on:
+  pull_request:
+    branches:
+      - main
   push:
     branches:
       - fix/android11-aarch32-detection
