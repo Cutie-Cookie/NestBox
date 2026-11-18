@@ -1,63 +1,446 @@
-name: Android APK (AArch32 fix)
+name: Build NestBox ARM64 APK (Android 11 AArch32 fix)
 
 on:
+  workflow_dispatch:
   push:
     branches:
       - fix/android11-aarch32-detection
-  workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
   build:
+    name: Build and verify complete ARM64 engine APK
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
-      - uses: android-actions/setup-android@v3
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
         with:
           packages: platform-tools
-      - name: Install Android SDK components
-        run: sdkmanager "platforms;android-35" "build-tools;35.0.0" "cmake;3.22.1" "ndk;28.2.13676358"
-      - name: Restore signing key and derive alias
-        env:
-          KEYSTORE_B64: ${{ secrets.NESTBOX_KEYSTORE_BASE64 }}
-          STORE_PASSWORD: ${{ secrets.NESTBOX_KEYSTORE_PASSWORD }}
+
+      - name: Install pinned Android build tools
+        run: |
+          sdkmanager "platforms;android-35" "build-tools;35.0.0" "ndk;28.2.13676358" "cmake;3.22.1"
+
+      - name: Fetch pinned Wayondroid source
+        shell: bash
         run: |
           set -euo pipefail
-          if [ -z "$KEYSTORE_B64" ] || [ -z "$STORE_PASSWORD" ]; then
-            echo "::error::NESTBOX_KEYSTORE_BASE64 or NESTBOX_KEYSTORE_PASSWORD is unavailable to this workflow."
-            exit 1
-          fi
-          printf '%s' "$KEYSTORE_B64" | tr -d '[:space:]' | base64 --decode > signing.keystore
-          KEY_ALIAS="$(keytool -list -v -keystore signing.keystore -storepass "$STORE_PASSWORD" 2>/dev/null | awk -F': ' '/Alias name:/{print $2; exit}')"
-          if [ -z "$KEY_ALIAS" ]; then
-            echo "::error::Could not read alias from keystore. Check the Base64 data and keystore password."
-            exit 1
-          fi
-          echo "SIGNING_STORE_FILE=$PWD/signing.keystore" >> "$GITHUB_ENV"
-          echo "SIGNING_KEY_ALIAS=$KEY_ALIAS" >> "$GITHUB_ENV"
-          echo "Signing alias identified (name not printed)."
-      - name: Fetch pinned Wayondroid engine
-        run: python3 scripts/fetch_engines.py
-      - name: Build rootless helper
-        run: |
           mkdir -p build/src
-          curl -L --fail -o build/wayondroid.tar.gz https://codeload.github.com/yoro1836/wayondroid/tar.gz/a45f80b
+          curl --fail --location --retry 3 \
+            "https://codeload.github.com/yoro1836/wayondroid/tar.gz/a45f80b1aaa463d199c9056bb8dda7c01be5ece7" \
+            -o build/wayondroid.tar.gz
           tar -xzf build/wayondroid.tar.gz -C build/src
-          bash scripts/build_tawcroot.sh build/src/wayondroid-a45f80b "$ANDROID_HOME/ndk/28.2.13676358"
-          bash scripts/build_helper.sh build/src/wayondroid-a45f80b "$ANDROID_HOME"
-      - name: Build APK using repository signing key
+          SOURCE_ROOT="$(tar -tzf build/wayondroid.tar.gz | sed -n '1{s,/.*,,;p;}')"
+          test -n "$SOURCE_ROOT"
+          test -f "build/src/$SOURCE_ROOT/tawcroot/src/syscalls_fd.c"
+          test -f "build/src/$SOURCE_ROOT/app/src/main/cpp/CMakeLists.txt"
+          echo "WAYON_SOURCE=$GITHUB_WORKSPACE/build/src/$SOURCE_ROOT" >> "$GITHUB_ENV"
+          echo "Using Wayondroid source: $SOURCE_ROOT"
+
+      - name: Install gfxstream host-build tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y meson ninja-build pkg-config
+
+      - name: Fetch checksum-verified Wayondroid runtime libraries
+        run: python3 -I scripts/fetch_engines.py
+
+      - name: Build Android Vulkan host backend with directly linked Android loader fallback
+        shell: bash
+        run: |
+          set -euo pipefail
+          PATCH_DIR="$WAYON_SOURCE/deps/gfxstream-patches/gfxstream"
+          BUILD_SCRIPT="$WAYON_SOURCE/scripts/gpu/build-gfxstream-backend.sh"
+          test -d "$PATCH_DIR"
+          # Do not route this small source edit through dep_apply_patches:
+          # patch(1) has repeatedly rejected an otherwise exact hunk.
+          rm -f "$PATCH_DIR/04-android-vulkan-global-fallback.patch"
+          cat > "$RUNNER_TEMP/patch_gfxstream.py" <<'PY'
+          from pathlib import Path
+          import re
+          import sys
+
+          dispatch = Path(sys.argv[1])
+          s = dispatch.read_text()
+          decl_marker = '#include <string.h>'
+          decl = '''#include <string.h>
+
+          #if defined(__ANDROID__)
+          extern "C" VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL vkGetInstanceProcAddr(
+              VkInstance instance, const char* pName);
+          extern "C" VKAPI_ATTR VkResult VKAPI_CALL vkCreateInstance(
+              const VkInstanceCreateInfo*, const VkAllocationCallbacks*, VkInstance*);
+          extern "C" VKAPI_ATTR VkResult VKAPI_CALL vkEnumerateInstanceExtensionProperties(
+              const char*, uint32_t*, VkExtensionProperties*);
+          extern "C" VKAPI_ATTR VkResult VKAPI_CALL vkEnumerateInstanceLayerProperties(
+              uint32_t*, VkLayerProperties*);
+          #endif'''
+          if 'extern "C" VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL vkGetInstanceProcAddr(' not in s:
+              if decl_marker not in s:
+                  raise SystemExit("Vulkan header include marker not found")
+              s = s.replace(decl_marker, decl, 1)
+
+          symbol = 'out->vkGetInstanceProcAddr = (PFN_vkGetInstanceProcAddr)dlSymFunc(lib, "vkGetInstanceProcAddr");'
+          linked = symbol + '''
+          #if defined(__ANDROID__)
+              // Force the NDK-linked Android system loader entrypoint. The
+              // runtime dlsym path can resolve a non-loader ICD or miss the
+              // public loader symbol in the app linker namespace.
+              out->vkGetInstanceProcAddr = ::vkGetInstanceProcAddr;
+          #endif'''
+          if 'Force the NDK-linked Android system loader entrypoint.' not in s:
+              if symbol not in s:
+                  raise SystemExit("vkGetInstanceProcAddr dispatch assignment not found")
+              s = s.replace(symbol, linked, 1)
+
+          marker = "#endif" + chr(10) + "#ifdef VK_VERSION_1_1"
+          addition = """    // Android's loader exports the core global trampoline symbols.
+              // Use these direct imports: GIPA(NULL, name) is not returning
+              // these three global commands on this host image.
+          #if defined(__ANDROID__)
+              out->vkCreateInstance = ::vkCreateInstance;
+              out->vkEnumerateInstanceExtensionProperties =
+                  ::vkEnumerateInstanceExtensionProperties;
+              out->vkEnumerateInstanceLayerProperties =
+                  ::vkEnumerateInstanceLayerProperties;
+          #endif
+          """
+          if "Resolve Vulkan global commands through the Android loader's" not in s:              if marker not in s:
+                  raise SystemExit("Could not find Vulkan version boundary in gfxstream source")
+              s = s.replace(marker, addition + "    #endif" + chr(10) + "#ifdef VK_VERSION_1_1", 1)
+          # The instance initializer clears its output table and then asks
+          # vkGetInstanceProcAddr(instance, ...) for global commands. Android's
+          # loader may return null for these three global entry points there.
+          # Preserve the already-resolved system-loader pointers instead.
+          instance_start = s.index("void init_vulkan_dispatch_from_instance(")
+          instance_end = s.index("void init_vulkan_dispatch_from_device(", instance_start)
+          instance = s[instance_start:instance_end]
+          patterns = (
+              (
+                  r'out->vkCreateInstance\s*=\s*\(PFN_vkCreateInstance\)vk->vkGetInstanceProcAddr\(instance,\s*"vkCreateInstance"\);',
+                  'out->vkCreateInstance = vk->vkCreateInstance;',
+              ),
+              (
+                  r'out->vkEnumerateInstanceExtensionProperties\s*=\s*\(PFN_vkEnumerateInstanceExtensionProperties\)vk->vkGetInstanceProcAddr\(\s*instance,\s*"vkEnumerateInstanceExtensionProperties"\);',
+                  'out->vkEnumerateInstanceExtensionProperties = vk->vkEnumerateInstanceExtensionProperties;',
+              ),
+              (
+                  r'out->vkEnumerateInstanceLayerProperties\s*=\s*\(PFN_vkEnumerateInstanceLayerProperties\)vk->vkGetInstanceProcAddr\(\s*instance,\s*"vkEnumerateInstanceLayerProperties"\);',
+                  'out->vkEnumerateInstanceLayerProperties = vk->vkEnumerateInstanceLayerProperties;',
+              ),
+          )
+          for pattern, replacement in patterns:
+              instance, count = re.subn(pattern, replacement, instance, count=1)
+              if count == 0 and replacement not in instance:
+                  raise SystemExit("Expected Android global Vulkan dispatch assignment not found")
+          s = s[:instance_start] + instance + s[instance_end:]
+          dispatch.write_text(s)
+
+          # Avoid requesting mutable AHB images for single/dual-channel
+          # UNORM formats. R8 has no required sRGB view in this path, and
+          # R16 has no sRGB variant; Mali rejects the mutable AHB query.
+          format_support = Path(sys.argv[3])
+          fs = format_support.read_text()
+          for old_format, new_format in (
+              ("{VK_FORMAT_R8_UNORM,\n         VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT | VK_IMAGE_CREATE_EXTENDED_USAGE_BIT},", "{VK_FORMAT_R8_UNORM},"),
+              ("{VK_FORMAT_R16_UNORM,\n         VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT | VK_IMAGE_CREATE_EXTENDED_USAGE_BIT},", "{VK_FORMAT_R16_UNORM},"),
+          ):
+              if new_format not in fs:
+                  if old_format not in fs:
+                      raise SystemExit("Expected R8/R16 Vulkan image flags not found")
+                  fs = fs.replace(old_format, new_format, 1)
+          format_support.write_text(fs)
+
+          # Some Android Mali drivers expose R8/R16 as Vulkan images but do
+          # not support exporting those formats as AHardwareBuffers. Retry
+          # the image-format query without an external handle and mark those
+          # images non-shareable, allowing gfxstream's copy fallback.
+          common_cpp = Path(sys.argv[4])
+          cc = common_cpp.read_text()
+          query_anchor = "VkResult res = mGetImageFormatProperties2Func(physdev, &formatInfo2, &outProps2);"
+          query_pos = cc.find(query_anchor)
+          if query_pos < 0:
+              raise SystemExit("Could not find external Vulkan image-format query")
+          fail_start = cc.find("    if (res != VK_SUCCESS) {", query_pos)
+          supported_pos = cc.find("    info->supported = true;", fail_start)
+          if fail_start < 0 or supported_pos < 0:
+              raise SystemExit("Could not find external image-format failure branch")
+          old_branch = cc[fail_start:supported_pos]
+          if "R8/R16 non-external fallback" not in old_branch:
+              replacement = """    if (res != VK_SUCCESS) {
+          if (res == VK_ERROR_FORMAT_NOT_SUPPORTED) {
+              if (info->format == VK_FORMAT_R8_UNORM || info->format == VK_FORMAT_R16_UNORM) {
+                  VkImageFormatProperties fallbackProps;
+                  VkResult fallbackRes = vk->vkGetPhysicalDeviceImageFormatProperties(
+                      physdev, info->format, info->type, info->tiling, info->usageFlags,
+                      info->createFlags, &fallbackProps);
+                  if (fallbackRes == VK_SUCCESS) {
+                      info->supported = true;
+                      info->supportsExternalMemory = false;
+                      info->requiresDedicatedAllocation = false;
+                      info->imageFormatProps2 = {
+                          VK_STRUCTURE_TYPE_IMAGE_FORMAT_PROPERTIES_2, 0, fallbackProps,
+                      };
+                      GFXSTREAM_WARNING("R8/R16 non-external fallback: %s",
+                                        string_VkFormat(info->format));
+                      return true;
+                  }
+              }
+              GFXSTREAM_DEBUG("Not Supported: %s %s %s %s",
+                              string_VkFormat(info->format), string_VkImageType(info->type),
+                              string_VkImageTiling(info->tiling),
+                              string_VkImageUsageFlagBits((VkImageUsageFlagBits)info->usageFlags));
+              info->supported = false;
+              return true;
+          } else {
+              GFXSTREAM_ERROR(
+                  "vkGetPhysicalDeviceImageFormatProperties2KHR query "
+                  "failed with %s "
+                  "for format 0x%x type 0x%x usage 0x%x flags 0x%x",
+                  string_VkResult(res), info->format, info->type, info->usageFlags,
+                  info->createFlags);
+              return false;
+          }
+                }
+
+                        """
+              cc = cc[:fail_start] + replacement + cc[supported_pos:]
+              common_cpp.write_text(cc)
+
+          common_h = Path(sys.argv[5])
+          hh = common_h.read_text()
+          old_decl = """        gfxstream::base::Optional<VkImage> imageForDedicatedAllocation = gfxstream::base::kNullopt,
+                  gfxstream::base::Optional<ColorBufferInfo*> colorBufferInfo = gfxstream::base::kNullopt);"""
+          new_decl = """        gfxstream::base::Optional<VkImage> imageForDedicatedAllocation = gfxstream::base::kNullopt,
+                  gfxstream::base::Optional<ColorBufferInfo*> colorBufferInfo = gfxstream::base::kNullopt,
+                  bool allowExternalExport = true);"""
+          if new_decl not in hh:
+              if old_decl not in hh:
+                  raise SystemExit("Could not find allocExternalMemory declaration")
+              hh = hh.replace(old_decl, new_decl, 1)
+              common_h.write_text(hh)
+
+          # Carry the per-format external-memory capability into image
+          # creation/allocation. AHB-incompatible formats use ordinary
+          # VkDeviceMemory and are reported as non-shareable to the guest.
+          old_sig = """                                      Optional<ColorBufferInfo*> colorBufferInfo) {"""
+          new_sig = """                                      Optional<ColorBufferInfo*> colorBufferInfo,                                      bool allowExternalExport) {"""
+          if new_sig not in cc:
+              if old_sig not in cc:
+                  raise SystemExit("Could not find allocExternalMemory definition")
+              cc = cc.replace(old_sig, new_sig, 1)
+          old_export = """    if (mDeviceInfo.supportsExternalMemoryExport &&
+                  getExternalMemoryMode() != ExternalMemory::Mode::HostAllocation) {"""
+          new_export = """    if (allowExternalExport && mDeviceInfo.supportsExternalMemoryExport &&
+                  getExternalMemoryMode() != ExternalMemory::Mode::HostAllocation) {"""
+          if new_export not in cc:
+              if old_export not in cc:
+                  raise SystemExit("Could not find external allocation export condition")
+              cc = cc.replace(old_export, new_export, 1)
+          old_return = """    if (!mDeviceInfo.supportsExternalMemoryExport) {
+                  return true;
+              }
+
+              uint32_t streamHandleType = 0;"""
+          new_return = """    if (!allowExternalExport || !mDeviceInfo.supportsExternalMemoryExport) {
+                  return true;
+              }
+
+              uint32_t streamHandleType = 0;"""
+          if new_return not in cc:
+              if old_return not in cc:
+                  raise SystemExit("Could not find external allocation export return")
+              cc = cc.replace(old_return, new_return, 1)
+          old_format = """    const VkFormat vkFormat = *vkFormatOpt;
+
+              // Requesting invalid texture sizes"""
+          new_format = """    const VkFormat vkFormat = *vkFormatOpt;
+              const ImageSupportInfo* formatSupportInfo = mImageSupportInfo.GetSupportedInfo(vkFormat);
+              const bool imageSupportsExternalMemory =
+                  formatSupportInfo && formatSupportInfo->supportsExternalMemory;
+
+              // Requesting invalid texture sizes"""
+          if new_format not in cc:
+              if old_format not in cc:
+                  raise SystemExit("Could not find color-buffer Vulkan format setup")
+              cc = cc.replace(old_format, new_format, 1)
+          old_image_ext = """    if (mDeviceInfo.supportsExternalMemoryExport || mDeviceInfo.supportsExternalMemoryImport) {"""
+          new_image_ext = """    if (imageSupportsExternalMemory &&
+                  (mDeviceInfo.supportsExternalMemoryExport || mDeviceInfo.supportsExternalMemoryImport)) {"""
+          if new_image_ext not in cc:
+              if old_image_ext not in cc:
+                  raise SystemExit("Could not find color-buffer external image condition")
+              cc = cc.replace(old_image_ext, new_image_ext, 1)
+          alloc_pattern = r'    bool allocRes = allocExternalMemory\(vk, &infoPtr->memory,\s*deviceAlignment, kNullopt, dedicatedImage, infoPtr\);'
+          alloc_replacement = """    bool allocRes = allocExternalMemory(vk, &infoPtr->memory,
+                                        deviceAlignment, kNullopt, dedicatedImage, infoPtr,
+                                        imageSupportsExternalMemory);"""
+          cc, alloc_count = re.subn(alloc_pattern, alloc_replacement, cc, count=1)
+          if alloc_count == 0 and "imageSupportsExternalMemory);" not in cc:
+              raise SystemExit("Could not find color-buffer external allocation call")
+          common_cpp.write_text(cc)
+
+          build = Path(sys.argv[2])
+          b = build.read_text()
+          old = "cpp_link_args = ['-Wl,-rpath,\\$ORIGIN']"
+          new = "cpp_link_args = ['-Wl,-rpath,\\$ORIGIN', '-lvulkan']"
+          if new not in b:
+              if old not in b:
+                  raise SystemExit("Could not find Android C++ link args in gfxstream build script")
+              b = b.replace(old, new, 1)
+              build.write_text(b)
+          print("Patched R8/R16 AHB format flags and linked Android Vulkan loader")
+          PY
+          python3 - "$BUILD_SCRIPT" "$RUNNER_TEMP/patch_gfxstream.py" <<'PY'
+          from pathlib import Path
+          import sys
+          p = Path(sys.argv[1])
+          s = p.read_text()
+          needle = 'dep_apply_patches gfxstream "$PATCH_DIR"\n'
+          insert = needle + 'python3 "' + sys.argv[2] + '" "$GFXSTREAM_DIR/host/vulkan/cereal/common/goldfish_vk_dispatch.cpp" "$0" "$GFXSTREAM_DIR/host/vulkan/vk_format_support.cpp" "$GFXSTREAM_DIR/host/vulkan/vk_common_operations.cpp" "$GFXSTREAM_DIR/host/vulkan/vk_common_operations.h"\n'
+          if needle not in s:
+              raise SystemExit("Could not locate gfxstream patch application hook")
+          p.write_text(s.replace(needle, insert, 1))
+          PY
+          bash "$BUILD_SCRIPT" --abi=aarch64
+          SOURCE_LIB="$WAYON_SOURCE/app/src/main/jniLibs/arm64-v8a"
+          TARGET_LIB="$GITHUB_WORKSPACE/app/src/main/jniLibs/arm64-v8a"
+          test -s "$SOURCE_LIB/libgfxstream_backend.so"
+          test -s "$SOURCE_LIB/libc++_shared.so"
+          cp -f "$SOURCE_LIB/libgfxstream_backend.so" "$TARGET_LIB/libgfxstream_backend.so"
+          cp -f "$SOURCE_LIB/libc++_shared.so" "$TARGET_LIB/libc++_shared.so"
+          echo "Built patched gfxstream backend: $(stat -c %s "$TARGET_LIB/libgfxstream_backend.so") bytes"
+
+      - name: Build patched ARM64 tawcroot
+        run: bash scripts/build_tawcroot.sh "$WAYON_SOURCE" "$ANDROID_HOME/ndk/28.2.13676358"
+
+      - name: Build patched ARM64 rootless helper and guest su
+        run: bash scripts/build_helper.sh "$WAYON_SOURCE" "$ANDROID_HOME"
+
+      - name: Verify every required native library before Gradle packaging
+        shell: bash
+        run: |
+          set -euo pipefail
+          JNI="app/src/main/jniLibs/arm64-v8a"
+          REQUIRED=(
+            libbinderd.so
+            libc++_shared.so
+            libgfxstream_backend.so
+            libvine_gralloc.so
+            libvine_hal_service.so
+            libvine_kumquat.so
+            libvine_lmkd.so
+            libvine_mediascan.so
+            libvine_pulse.so
+            libvine_runtime.so
+            libvine_vk_gfxstream.so
+            libvine_vold_shim.so
+            libvine_wl.so
+            libtawcroot.so
+            libvine_helper.so
+            libnbsu.so
+          )
+          for lib in "${REQUIRED[@]}"; do
+            test -s "$JNI/$lib" || { echo "::error::Missing or empty native library: $JNI/$lib"; exit 1; }
+            "$ANDROID_HOME/ndk/28.2.13676358/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf" -h "$JNI/$lib" | grep -q "AArch64" || {
+              echo "::error::Not an AArch64 ELF library: $lib"; exit 1;            }
+            echo "Verified $lib ($(stat -c %s "$JNI/$lib") bytes)"
+          done
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Build debug APK
+        run: ./gradlew --no-daemon clean assembleDebug
+
+      - name: Restore original APK-only components and re-sign
+        shell: bash
         env:
-          SIGNING_STORE_FILE: ${{ env.SIGNING_STORE_FILE }}
-          SIGNING_STORE_PASSWORD: ${{ secrets.NESTBOX_KEYSTORE_PASSWORD }}
-          SIGNING_KEY_ALIAS: ${{ env.SIGNING_KEY_ALIAS }}
-          SIGNING_KEY_PASSWORD: ${{ secrets.NESTBOX_KEYSTORE_PASSWORD }}
-        run: ./gradlew --no-daemon assembleDebug
-      - name: Upload APK
+          NESTBOX_KEYSTORE_BASE64: ${{ secrets.NESTBOX_KEYSTORE_BASE64 }}
+          NESTBOX_KEYSTORE_PASSWORD: ${{ secrets.NESTBOX_KEYSTORE_PASSWORD }}
+        run: |
+          set -euo pipefail
+          APK="app/build/outputs/apk/debug/app-debug.apk"
+          ORIGINAL="$RUNNER_TEMP/NestBox-0.4.0-original.apk"
+          curl --fail --location --retry 3 \
+            "https://github.com/rifatrajbd/NestBox-An-Android-Emulator-Support-Lineage-OS/releases/download/v0.4.0/NestBox-0.4.0-debug.apk" \
+            -o "$ORIGINAL"
+          BAKSMALI="$RUNNER_TEMP/baksmali-3.0.10-fat.jar"
+          SMALI="$RUNNER_TEMP/smali-3.0.10-fat.jar"
+          curl --fail --location --retry 3 \
+            "https://github.com/baksmali/smali/releases/download/3.0.10/baksmali-3.0.10-fat.jar" -o "$BAKSMALI"
+          curl --fail --location --retry 3 \
+            "https://github.com/baksmali/smali/releases/download/3.0.10/smali-3.0.10-fat.jar" -o "$SMALI"
+          echo "37ae4a41a8886e15c20b8362fa4250f96bbdb55e1a608199ad8b5dff068b588f  $BAKSMALI" | sha256sum -c -
+          echo "32fa0e88a6c397b3922201adf5f3e534fbaed5a663c71d0c558c3ddce0af844a  $SMALI" | sha256sum -c -
+          python3 -I scripts/merge_original_apk.py "$ORIGINAL" "$APK" "$BAKSMALI" "$SMALI"
+          "$ANDROID_HOME/build-tools/35.0.0/zipalign" -f 4 "$APK" "$RUNNER_TEMP/app-aligned.apk"
+          : "${NESTBOX_KEYSTORE_BASE64:?Missing GitHub secret NESTBOX_KEYSTORE_BASE64}"
+          : "${NESTBOX_KEYSTORE_PASSWORD:?Missing GitHub secret NESTBOX_KEYSTORE_PASSWORD}"
+          printf '%s' "$NESTBOX_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/NestBox-release.p12"
+          test -s "$RUNNER_TEMP/NestBox-release.p12"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign \
+            --ks "$RUNNER_TEMP/NestBox-release.p12" \
+            --ks-type PKCS12 \
+            --ks-key-alias nestbox-release \
+            --ks-pass env:NESTBOX_KEYSTORE_PASSWORD \
+            --key-pass env:NESTBOX_KEYSTORE_PASSWORD \
+            --out "$RUNNER_TEMP/app-signed.apk" "$RUNNER_TEMP/app-aligned.apk"
+          mv "$RUNNER_TEMP/app-signed.apk" "$APK"
+
+      - name: Verify complete installable ARM64 APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK="app/build/outputs/apk/debug/app-debug.apk"
+          test -s "$APK"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$APK"
+          CERTS="$("$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs "$APK")"
+          grep -Fqi "1dd1cfb8846ef3ddb439c1c8b232f2c40f9075f583632cc8d8235c20c09c6bc4" <<< "$CERTS" || {
+            echo "::error::APK was not signed with the permanent NestBox release key"
+            echo "$CERTS"
+            exit 1
+          }
+          BADGING="$("$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK")"
+          grep -Fq "package: name='app.nbox'" <<< "$BADGING"
+          grep -Fq "sdkVersion:'29'" <<< "$BADGING"
+          if unzip -Z1 "$APK" | grep -qE '^lib/(armeabi-v7a|x86|x86_64)/'; then
+            echo "::error::Unexpected non-ARM64 native libraries found"
+            exit 1
+          fi
+          REQUIRED=(
+            libbinderd.so libc++_shared.so libgfxstream_backend.so
+            libvine_gralloc.so libvine_hal_service.so libvine_kumquat.so
+            libvine_lmkd.so libvine_mediascan.so libvine_pulse.so
+            libvine_runtime.so libvine_vk_gfxstream.so libvine_vold_shim.so
+            libvine_wl.so libtawcroot.so libvine_helper.so libnbsu.so
+          )
+          for lib in "${REQUIRED[@]}"; do
+            unzip -Z1 "$APK" | grep -Fxq "lib/arm64-v8a/$lib" || {
+              echo "::error::APK is missing lib/arm64-v8a/$lib"
+              exit 1
+            }
+          done
+          echo "All ${#REQUIRED[@]} required ARM64 libraries are packaged."
+          echo "APK size: $(du -h "$APK" | cut -f1)"
+          sha256sum "$APK"
+
+      - name: Upload verified APK
         uses: actions/upload-artifact@v4
         with:
-          name: NestBox-android11-aarch32-fix-signed
-          path: app/build/outputs/apk/debug/*.apk
+          name: NestBox-arm64-v8a-debug-complete
+          path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
+          retention-days: 14
