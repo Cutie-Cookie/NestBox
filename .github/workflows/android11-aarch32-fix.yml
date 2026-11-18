@@ -1,0 +1,36 @@
+name: Android APK (AArch32 fix)
+
+on:
+  push:
+    branches:
+      - fix/android11-aarch32-detection
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - name: Install Android SDK components
+        run: sdkmanager "platforms;android-35" "build-tools;35.0.0" "cmake;3.22.1" "ndk;28.2.13676358"
+      - name: Fetch pinned Wayondroid engine
+        run: python3 scripts/fetch_engines.py
+      - name: Build rootless helper
+        run: |
+          mkdir -p build/src
+          curl -L --fail -o build/wayondroid.tar.gz https://codeload.github.com/yoro1836/wayondroid/tar.gz/a45f80b
+          tar -xzf build/wayondroid.tar.gz -C build/src
+          bash scripts/build_helper.sh build/src/wayondroid-a45f80b "$ANDROID_HOME"
+      - name: Build debug APK
+        run: ./gradlew --no-daemon assembleDebug
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: NestBox-android11-aarch32-fix-debug
+          path: app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
