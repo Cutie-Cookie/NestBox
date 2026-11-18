@@ -29,7 +29,7 @@ if "nb_apply_overlay" in s:
 # extracted system-as-root image. Sanitize that file too, or init still sees
 # ro.product.cpu.abilist32 and starts the 32-bit BoringSSL self-test.
 old_paths = 'for (const char* f : {"/system/build.prop", "/vendor/build.prop", "/vendor/odm/etc/build.prop"}) {'
-new_paths = 'for (const char* f : {"/system/build.prop", "/system/product/etc/build.prop", "/product/etc/build.prop", "/vendor/build.prop", "/vendor/odm/etc/build.prop"}) {'
+new_paths = 'for (const char* f : {"/system/build.prop", "/system/product/etc/build.prop", "/vendor/build.prop", "/vendor/odm/etc/build.prop"}) {'
 if new_paths not in s:
     if old_paths not in s:
         raise SystemExit("64-bit-only property rewrite loop not found; refusing to patch")
@@ -120,18 +120,13 @@ bool nb_apply_overlay(const Layout& l, std::string* error) {
         }
     }
     const std::string props = read_file(l.instance + "/nestbox.prop").value_or("");
-    // The extracted system-as-root layout on this Android 11 image stores
-    // product properties below system/product. Do not create a new /product
-    // tree: that can fail on this rootfs and can shadow the actual partition.
-    // Prefer the original extracted-image location; use /product only when it
-    // already exists as a regular build.prop in a split-partition layout.
-    const std::string system_product_prop = R + "/system/product/etc/build.prop";
-    const std::string split_product_prop = R + "/product/etc/build.prop";
-    std::string prop;
-    if (is_regular_file(system_product_prop)) prop = system_product_prop;
-    else if (is_regular_file(split_product_prop)) prop = split_product_prop;
-    else return fail(error, "product build.prop not found in extracted rootfs (checked " +
-                     system_product_prop + " and " + split_product_prop + ")");
+    // In the extracted system-as-root tree, /product is an absolute symlink
+    // to /system/product. Following R/product on the host escapes R and can
+    // address the phone's read-only /system/product. Always edit the real
+    // extracted target under R/system/product.
+    const std::string prop = R + "/system/product/etc/build.prop";
+    if (!is_directory(R + "/system/product/etc"))
+        return fail(error, "extracted product property directory is missing: " + R + "/system/product/etc");
     std::string text = read_file(prop).value_or("");
     const size_t b = text.find("\n# nestbox-begin");
     if (b != std::string::npos) {
