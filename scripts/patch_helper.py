@@ -120,7 +120,18 @@ bool nb_apply_overlay(const Layout& l, std::string* error) {
         }
     }
     const std::string props = read_file(l.instance + "/nestbox.prop").value_or("");
-    const std::string prop = R + "/product/etc/build.prop";
+    // The extracted system-as-root layout on this Android 11 image stores
+    // product properties below system/product. Do not create a new /product
+    // tree: that can fail on this rootfs and can shadow the actual partition.
+    // Prefer the original extracted-image location; use /product only when it
+    // already exists as a regular build.prop in a split-partition layout.
+    const std::string system_product_prop = R + "/system/product/etc/build.prop";
+    const std::string split_product_prop = R + "/product/etc/build.prop";
+    std::string prop;
+    if (is_regular_file(system_product_prop)) prop = system_product_prop;
+    else if (is_regular_file(split_product_prop)) prop = split_product_prop;
+    else return fail(error, "product build.prop not found in extracted rootfs (checked " +
+                     system_product_prop + " and " + split_product_prop + ")");
     std::string text = read_file(prop).value_or("");
     const size_t b = text.find("\n# nestbox-begin");
     if (b != std::string::npos) {
@@ -130,7 +141,7 @@ bool nb_apply_overlay(const Layout& l, std::string* error) {
     while (!text.empty() && text.back() == '\n') text.pop_back();
     if (!props.empty()) text += "\n# nestbox-begin\n" + props + "\n# nestbox-end\n";
     else text += "\n";
-    if (!mkdirs_or_fail(R + "/product/etc", error) || !write_mode(prop, text, 0644, error)) return false;
+    if (!write_mode(prop, text, 0644, error)) return false;
     if (props.find("ro.hardware.egl=swiftshader") != std::string::npos) {
         const auto verify = read_file(prop);
         if (!verify || verify->find("ro.hardware.egl=swiftshader") == std::string::npos)
