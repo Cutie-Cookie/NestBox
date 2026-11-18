@@ -80,3 +80,12 @@ No runtime fix is considered successful until a device test log confirms the gue
 - External Waydroid documented fallback properties for unsupported/VM graphics: `ro.hardware.gralloc=default` and `ro.hardware.egl=swiftshader`. Implemented those in the NestBox guest overlay plus `ro.opengles.version=196608` (OpenGL ES 3.0) as the software-renderer capability, retaining Waydroid composer/HWC and all native components. No graphics service was removed.
 - This is a targeted, evidence-driven configuration change; the software renderer's presence and runtime success still need CI/ROM inspection and device validation. If EGL continues aborting, capture which `libEGL_*` and GLES driver files are in the guest image and test a fallback only after verifying the actual library availability.
 - Reference: official Waydroid docs describe SwiftShader fallback for unsupported graphics/VM environments. https://docs.waydro.id/faq/get-waydroid-to-work-through-a-vm
+
+
+## Step 8 — Build #51 APK verification (2026-11-18)
+- Workflow run 44292432350 completed successfully at commit `9e9631940ed935d41cc9f7eb4d64aabfa274433a`.
+- Artifact ID `14421778736` (`NestBox-arm64-v8a-debug-complete`) downloaded; APK extracted locally to `NestBox-Fixed52.apk`.
+- SHA-256: `c12f5a4a01b540c997a48e5c8774133055afa18a83448e6035fea51eebc399e`.
+- Workflow verification step passed: apksigner verify, permanent release-key fingerprint check, package name/sdk check, ARM64-only native library check, and all 16 required libraries present. Workflow restores original APK-only components and signs after merge.
+- Local ZIP test passed. Local comparison against Build61: 286 entries each, no missing or added entries; exactly 3 payload entries differ (`classes3.dex`, `classes5.dex`, `lib/arm64-v8a/libvine_helper.so`). This includes the original APK restoration/merge flow; original assets/native/DEX payload preservation is maintained.
+- Runtime boot is not yet verified. This is the next device-test candidate, not a claim that graphics initialization or Android boot is fixed.
