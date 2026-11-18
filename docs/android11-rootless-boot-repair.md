@@ -28,5 +28,10 @@ No runtime fix is considered successful until a device test log confirms the gue
 ## Step-by-step changes and test results
 (Each new action, patch, CI attempt, error, correction, and verification result is appended below. Failures are retained, not erased.)
 
-### Step 2 — pending
-Source-level investigation and first targeted repair not yet applied.
+### Step 2 — 2026-11-18: targeted boot repair implemented; first CI attempt failed
+- Added rootless-only repair code to `scripts/patch_helper.py` that backs up `init.zygote64_32.rc` to the instance's `nestbox-original` directory and rewrites the actual imported file to the 64-bit-only portion. The generated `init.zygote64.rc` is also written.
+- Added a targeted `bpfloader.rc` edit that backs up the original rc and removes only `reboot_on_failure` from the bpfloader service stanza. It does not disable the service or trigger. This is a mitigation to allow Android to continue when rootless BPF loading is unsupported; it does not claim BPF functionality is fixed.
+- Added a workflow branch trigger for `fix/android11-rootless-boot-repair` to allow isolated CI.
+- First CI attempt (run #40, ID `44280151250`) **failed** during native compilation of `rootless_prep.cpp`: `VINE_LOGW` was unavailable in that translation unit at the two new diagnostic calls. The failure was limited to diagnostics, not the zygote/bpf policy logic.
+- Correction committed: replaced those calls with `fprintf(stderr,...)`, which is available via the existing `cstdio` include. Rebuild triggered automatically by push.
+- Next: verify script patch application, native compile, full APK merge/sign checks, and download artifact for local APK entry comparison. Runtime boot still requires user device test after APK delivery.
