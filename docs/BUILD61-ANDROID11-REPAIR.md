@@ -105,3 +105,22 @@ Workflow run **#34** (`44273995216`) completed successfully for the correction c
 A local entry comparison against Build #31's complete APK found the same **286 entry paths** and identical file size. Only four entries had changed hashes: `lib/arm64-v8a/libvine_helper.so` (the intended helper rebuild) and the three APK signing metadata entries. No other APK entry changed in that comparison.
 
 **Runtime testing is still pending**. This build is a candidate for the next device test; a successful CI/package comparison does not itself prove Android 11 boots.
+
+
+## Follow-up correction: X11-test1 failure and Build #36
+
+### Additional finding
+The prior correction wrote `ro.product.cpu.abilist32=` (an empty property value) rather than removing the property line. Because Android init wildcard property triggers may still match a defined property even when its value is empty, clearing the value was not a sufficiently safe way to suppress the `abilist32=* && early-init` trigger. The correction now removes the base `ro.product.cpu.abilist32` line entirely from sanitized build.prop files. This is a focused change to `scripts/patch_helper.py`; it does not alter Build 61 APK restoration, native libraries, other ABI properties, or signing.
+
+### Build #36
+- Commit: `d252e9b42ff8a8e9bf4014dadbab1f224f0e102c`
+- Workflow run: [#36](https://github.com/Cutie-Cookie/NestBox/actions/runs/44276027841), completed successfully.
+- Artifact: `NestBox-arm64-v8a-debug-complete` (ID `14413794494`), not expired at build time.
+- Workflow steps all passed, including native builds, 16 required ARM64 library checks, Gradle packaging, original APK restoration/re-signing, and final APK verification/upload.
+- Downloaded artifact locally and verified ZIP/APK integrity. APK SHA-256: `9ffe7419af70528ebbcf5b715594ac04d1aaec0189d4fc1d53528c15b1bf8881`.
+- APK has 286 ZIP entries and 22 ARM64 native-library entries; all 16 workflow-required libraries are present.
+- Build 61 original-only libraries `libOpenglRender.so`, `libloader.so`, and `libtwoyi.so` are present.
+- CI signing verification passed; CI reported v3 signing enabled. The artifact is the exact APK downloaded from run #36.
+
+### Remaining validation
+This is still a test candidate, not a proven boot fix. The only decisive next check is runtime testing on the Android 11 guest in the user's device/ROM. Record whether the guest proceeds past the `boringssl_self_test32` init trigger and whether a new failure appears.
