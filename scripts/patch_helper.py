@@ -130,7 +130,13 @@ bool nb_apply_overlay(const Layout& l, std::string* error) {
     while (!text.empty() && text.back() == '\n') text.pop_back();
     if (!props.empty()) text += "\n# nestbox-begin\n" + props + "\n# nestbox-end\n";
     else text += "\n";
-    if (!mkdirs_or_fail(R + "/system/product/etc", error) || !write_mode(prop, text, 0644, error)) return false;
+    if (!mkdirs_or_fail(R + "/product/etc", error) || !write_mode(prop, text, 0644, error)) return false;
+    if (props.find("ro.hardware.egl=swiftshader") != std::string::npos) {
+        const auto verify = read_file(prop);
+        if (!verify || verify->find("ro.hardware.egl=swiftshader") == std::string::npos)
+            return fail(error, "rootless graphics property overlay verification failed at " + prop);
+        fprintf(stderr, "NestBox: verified rootless graphics properties in %s\\n", prop.c_str());
+    }
     if (!nb_copy_tree(l.instance + "/nestbox.files", R, error)) return false;
     const std::string init_dir = R + "/system/product/etc/init";
     // left by NestBox 0.6-0.7 (Android 10 port)
