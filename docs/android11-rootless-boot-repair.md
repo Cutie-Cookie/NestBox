@@ -52,3 +52,13 @@ No runtime fix is considered successful until a device test log confirms the gue
 - Corrected patch on the repair branch: recognize the init option by prefix `reboot_on_failure ` and remove the full directive line only within the bpfloader service stanza. This leaves the bpfloader service itself and its trigger intact. Next build will test that the patch is actually applied (prepare.log must not show the no-option warning).
 - `vold` continues to crash repeatedly in `AbortFuseConnections()` due `Permission denied [/sys/fs/fuse/connections]`; this is secondary shutdown noise but will be tracked as a separate rootless compatibility defect.
 - Test3 artifact does **not** validate boot success. This build is withdrawn as a successful fix claim; its failure is documented, and the next APK must pass CI plus another device test.
+
+
+## Step 5 — 2026-11-18: corrected APK build #45
+- Commit `29b3c8b66e36513b5cdde8f5cb5e856f4681300d` corrected the parser to match the complete option prefix `reboot_on_failure ` rather than an exact word. Build #45 includes this correction.
+- Workflow run `44285392626` completed successfully (run #45). Native helper compilation, all required native library checks, Gradle APK build, original APK restoration/merge, v3 signing, verification, and artifact upload passed.
+- Artifact ID: `14418759151`; extracted APK size 79,698,460 bytes; SHA-256 `2450c3e57bee3cd3877ce0a7366c175d34256eae4232923f4232c82f1d33a9ed`.
+- CI `apksigner verify`: v3 true, one signer; permanent release-certificate fingerprint check passed. 16 required native libraries passed CI; local ZIP extraction shows 22 ARM64 `.so` entries.
+- Build #45 compared locally against downloaded Build61 baseline: 286 APK entries both; no missing entries and no added entries. Exactly 3 non-signature payload entries changed: `classes5.dex`, `classes9.dex`, and `lib/arm64-v8a/libvine_helper.so`; original preserved `assets/nestbox/original/classes14.dex` remains byte-identical.
+- Local `jarsigner -verify` exited 0, but its output warns that Android APK entries are not fully represented in JarInputStream verification; therefore Android v3 signature validation is credited to CI's `apksigner`, not local jarsigner.
+- Build #45 is the corrected APK candidate, **runtime not yet confirmed**. Test3 failure remains the last device evidence; test4 should specifically check that prepare.log no longer reports `bpfloader.rc has no reboot_on_failure option to remove`, then capture boot state/logs and any new failure.
