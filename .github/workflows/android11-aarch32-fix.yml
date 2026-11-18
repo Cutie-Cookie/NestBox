@@ -23,6 +23,12 @@ jobs:
           packages: platform-tools
       - name: Install Android SDK components
         run: sdkmanager "platforms;android-35" "build-tools;35.0.0" "cmake;3.22.1" "ndk;28.2.13676358"
+      - name: Restore signing key
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          echo "$KEYSTORE_B64" | base64 --decode > signing.keystore
+          echo "SIGNING_STORE_FILE=$PWD/signing.keystore" >> "$GITHUB_ENV"
       - name: Fetch pinned Wayondroid engine
         run: python3 scripts/fetch_engines.py
       - name: Build rootless helper
@@ -32,11 +38,16 @@ jobs:
           tar -xzf build/wayondroid.tar.gz -C build/src
           bash scripts/build_tawcroot.sh build/src/wayondroid-a45f80b "$ANDROID_HOME/ndk/28.2.13676358"
           bash scripts/build_helper.sh build/src/wayondroid-a45f80b "$ANDROID_HOME"
-      - name: Build debug APK
+      - name: Build APK with original signing key
+        env:
+          SIGNING_STORE_FILE: ${{ env.SIGNING_STORE_FILE }}
+          SIGNING_STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          SIGNING_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          SIGNING_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: ./gradlew --no-daemon assembleDebug
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: NestBox-android11-aarch32-fix-debug
+          name: NestBox-android11-aarch32-fix-signed
           path: app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
