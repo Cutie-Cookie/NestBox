@@ -135,7 +135,7 @@ bool nb_apply_overlay(const Layout& l, std::string* error) {
         const auto verify = read_file(prop);
         if (!verify || verify->find("ro.hardware.egl=swiftshader") == std::string::npos)
             return fail(error, "rootless graphics property overlay verification failed at " + prop);
-        fprintf(stderr, "NestBox: verified rootless graphics properties in %s\\n", prop.c_str());
+        fprintf(stderr, "NestBox: verified rootless graphics properties in %s\n", prop.c_str());
     }
     if (!nb_copy_tree(l.instance + "/nestbox.files", R, error)) return false;
     const std::string init_dir = R + "/system/product/etc/init";
