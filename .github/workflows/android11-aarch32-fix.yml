@@ -117,7 +117,8 @@ jobs:
                   ::vkEnumerateInstanceLayerProperties;
           #endif
           """
-          if "Resolve Vulkan global commands through the Android loader's" not in s:              if marker not in s:
+          if "Resolve Vulkan global commands through the Android loader's" not in s:
+              if marker not in s:
                   raise SystemExit("Could not find Vulkan version boundary in gfxstream source")
               s = s.replace(marker, addition + "    #endif" + chr(10) + "#ifdef VK_VERSION_1_1", 1)
           # The instance initializer clears its output table and then asks
@@ -236,7 +237,8 @@ jobs:
           # creation/allocation. AHB-incompatible formats use ordinary
           # VkDeviceMemory and are reported as non-shareable to the guest.
           old_sig = """                                      Optional<ColorBufferInfo*> colorBufferInfo) {"""
-          new_sig = """                                      Optional<ColorBufferInfo*> colorBufferInfo,                                      bool allowExternalExport) {"""
+          new_sig = """                                      Optional<ColorBufferInfo*> colorBufferInfo,
+                                      bool allowExternalExport) {"""
           if new_sig not in cc:
               if old_sig not in cc:
                   raise SystemExit("Could not find allocExternalMemory definition")
@@ -355,7 +357,8 @@ jobs:
           for lib in "${REQUIRED[@]}"; do
             test -s "$JNI/$lib" || { echo "::error::Missing or empty native library: $JNI/$lib"; exit 1; }
             "$ANDROID_HOME/ndk/28.2.13676358/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf" -h "$JNI/$lib" | grep -q "AArch64" || {
-              echo "::error::Not an AArch64 ELF library: $lib"; exit 1;            }
+              echo "::error::Not an AArch64 ELF library: $lib"; exit 1;
+            }
             echo "Verified $lib ($(stat -c %s "$JNI/$lib") bytes)"
           done
 
