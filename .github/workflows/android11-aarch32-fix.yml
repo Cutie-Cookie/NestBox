@@ -5,6 +5,7 @@ on:
   push:
     branches:
       - fix/android11-aarch32-detection
+      - fix/android11-rootless-boot-repair
 
 permissions:
   contents: read
