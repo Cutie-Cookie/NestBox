@@ -68,7 +68,7 @@ std::string nb_make_bpfloader_nonfatal(const std::string& rc, bool* changed) {
         } else if (trimmed.empty()) {
             in_service = false;
         }
-        if (in_service && trimmed == "reboot_on_failure") {
+        if (in_service && trimmed.rfind("reboot_on_failure ", 0) == 0) {
             *changed = true;
             continue;
         }
