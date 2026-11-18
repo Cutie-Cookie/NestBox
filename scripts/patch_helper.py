@@ -38,7 +38,7 @@ if new_paths not in s:
 # The parser's partition-prefix logic does not match the base ro.product.cpu
 # property names. Explicitly clear the base abilist32 and constrain abilist.
 old_abi = 'if (rest == ".product.cpu.abilist") line = key + "=arm64-v8a";'
-new_abi = 'if (key == "ro.product.cpu.abilist") line = key + "=arm64-v8a";\n        else if (key == "ro.product.cpu.abilist32") line = key + "=";\n        else if (rest == ".product.cpu.abilist") line = key + "=arm64-v8a";'
+new_abi = 'if (key == "ro.product.cpu.abilist") line = key + "=arm64-v8a";\n        else if (key == "ro.product.cpu.abilist32") continue; // Remove trigger property entirely; empty values may still match init wildcard triggers.\n        else if (rest == ".product.cpu.abilist") line = key + "=arm64-v8a";'
 if new_abi not in s:
     if old_abi not in s:
         raise SystemExit("ABI property rewrite cases not found; refusing to patch")
