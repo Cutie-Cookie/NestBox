@@ -109,3 +109,10 @@ No runtime fix is considered successful until a device test log confirms the gue
 - Correction in commit `4f5a755ce1d99fff4047bd455484336ae1d0388b`: select the existing `/system/product/etc/build.prop` first; use `/product/etc/build.prop` only if that file already exists. If neither exists, fail with an explicit diagnostic. Do not create a new product directory. Preserve the marked overlay block and read-back verification.
 - This correction restores the original extracted-image path while retaining compatibility with an already-present split-product path. It does not claim to fix EGL; the graphics driver loading problem remains to be tested after rootfs preparation succeeds.
 - Build and APK verification are pending. Fixed53 is explicitly rejected as a regression and must not be used.
+
+
+## Step 11 — Test7 absolute-symlink escape (2026-11-19)
+- Test7 repeats the exact Test6 failure: rootfs preparation stops while writing `.../rootless/rootfs/product/etc/build.prop`; guest logcat says the instance is not running and kmsg is empty. The guest never starts.
+- The previous Step 10 correction was incomplete. It used `is_regular_file(R + "/product/etc/build.prop")` as a fallback. That check follows symlinks. In this system-as-root image, `R/product` is an absolute symlink to `/system/product`; resolving it from the host process escapes the extracted rootfs and addresses the phone's own read-only `/system/product`. The write therefore fails. This explains why Fixed58 still emitted the host-side `rootfs/product/etc/build.prop` error.
+- Corrected in commit `1d20084ca7acc1f76b3ca8c4ad56c219890d4384`: all host-side edits now target only `R/system/product/etc/build.prop`, and the code verifies that the extracted directory exists before writing. The unsafe `/product/etc/build.prop` fallback was removed from both the overlay and 32-bit ABI sanitation path. This keeps every host write inside the extracted rootfs.
+- Fixed58 is rejected for device testing. The new build must pass rootfs preparation before another graphics/boot diagnosis is meaningful. Build and complete APK verification are pending.
