@@ -67,3 +67,41 @@ The workflow uploaded artifact `NestBox-arm64-v8a-debug-complete` (artifact ID `
 ## Testing status
 
 CI build and packaging checks passed. **Runtime testing on the user's device/ROM is not yet confirmed**; awaiting the user's test report.
+
+## Follow-up: X11-test1 boot trace and corrected ABI-property patch
+
+**Test archive:** `X11-test1.zip` (Android 13 host; Android 11 guest; rootless tawcroot)
+
+### What the trace confirmed
+
+The host diagnostic says `Host AArch32: no`, yet guest init evaluates the `ro.product.cpu.abilist32=* && early-init` trigger and starts `boringssl_self_test32`. That executable fails with `Exec format error`; the service's `reboot_on_failure` causes shutdown. The repeated `reboot call returned: Function not implemented` is during the shutdown/reboot attempt, after the fatal trigger—not the initial cause.
+
+The uploaded `guest-logcat.txt` says `instance is not running`, and `engine-logs/init.log` only records `init exited: 139`; neither contains guest userspace diagnostics before the failure. `kmsg.txt` contains the useful early-init sequence.
+
+### Two omissions in the first repair
+
+1. The 64-bit-only property rewrite did not include `/system/product/etc/build.prop`, where Android 11 Product ABI properties can remain declared.
+2. The property parser's partition-prefix matching did not correctly match the base key `ro.product.cpu.abilist32`. Merely adding Product's build.prop to the file list would still leave this key unmodified.
+
+### Correction committed
+
+The rootless helper patch now:
+- Includes `/system/product/etc/build.prop` in the 64-bit-only property rewrite.
+- Explicitly rewrites the base `ro.product.cpu.abilist` to `arm64-v8a`.
+- Explicitly clears the base `ro.product.cpu.abilist32`.
+- Retains the existing partition-prefixed property handling and `ro.zygote` rewrite.
+
+**Correction commit:** `dd646d076a6c7b0568ec5d5687482f720eacb06e`.
+
+### Build #34 verification
+
+Workflow run **#34** (`44273995216`) completed successfully for the correction commit:
+- All 18 build, merge, signature, native-library, and upload steps succeeded.
+- Artifact ID: `14414276778`.
+- APK SHA-256: `cd5d37482e06a8baa4a7b790cab8a70c47d73fef8b053b08f0d97fccb406eb37`.
+- APK size: **79,698,460 bytes**; 286 ZIP entries.
+- All 16 required ARM64 libraries were present; APK signing verification passed in CI.
+
+A local entry comparison against Build #31's complete APK found the same **286 entry paths** and identical file size. Only four entries had changed hashes: `lib/arm64-v8a/libvine_helper.so` (the intended helper rebuild) and the three APK signing metadata entries. No other APK entry changed in that comparison.
+
+**Runtime testing is still pending**. This build is a candidate for the next device test; a successful CI/package comparison does not itself prove Android 11 boots.
