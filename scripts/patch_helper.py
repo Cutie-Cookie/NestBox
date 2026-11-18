@@ -25,6 +25,16 @@ s = open(path, encoding="utf-8").read()
 if "nb_apply_overlay" in s:
     raise SystemExit("already patched: start from a clean copy of rootless_prep.cpp")
 
+# Android 11 Product properties live under system/product/etc/build.prop on the
+# extracted system-as-root image. Sanitize that file too, or init still sees
+# ro.product.cpu.abilist32 and starts the 32-bit BoringSSL self-test.
+old_paths = 'for (const char* f : {"/system/build.prop", "/vendor/build.prop", "/vendor/odm/etc/build.prop"}) {'
+new_paths = 'for (const char* f : {"/system/build.prop", "/system/product/etc/build.prop", "/vendor/build.prop", "/vendor/odm/etc/build.prop"}) {'
+if new_paths not in s:
+    if old_paths not in s:
+        raise SystemExit("64-bit-only property rewrite loop not found; refusing to patch")
+    s = s.replace(old_paths, new_paths, 1)
+
 s = s.replace("#include <dirent.h>\n", "#include <dirent.h>\n#include <fcntl.h>\n#include <vector>\n", 1)
 
 helpers = r'''
