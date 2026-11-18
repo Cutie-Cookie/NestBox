@@ -201,10 +201,10 @@ new_bpf = """    // Rootless hosts cannot reliably grant BPF kernel capabilities
             const std::string backup = l.instance + "/nestbox-original/bpfloader.rc";
             if (!nb_backup_once(bpf_rc, backup, error) || !write_mode(bpf_rc, safe_rc, 0644, error)) return false;
         } else {
-            VINE_LOGW("NestBox boot repair: bpfloader.rc has no reboot_on_failure option to remove");
+            fprintf(stderr, "NestBox boot repair: bpfloader.rc has no reboot_on_failure option to remove\\n");
         }
     } else {
-        VINE_LOGW("NestBox boot repair: bpfloader.rc missing; policy unchanged");
+        fprintf(stderr, "NestBox boot repair: bpfloader.rc missing; policy unchanged\\n");
     }
     if (!copy_mode(o.lib_dir + "/libvine_lmkd.so", R + "/system/bin/vine_lmkd", 0755, error) ||
         !copy_mode(o.lib_dir + "/libvine_mediascan.so", R + "/system/bin/vine_mediascan", 0755, error))
