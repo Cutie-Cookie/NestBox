@@ -114,6 +114,44 @@ s = s.replace(tail, "    if (!mkdirs_or_fail(l.run + \"/pulse\", error)) return 
 open(path, "w", encoding="utf-8").write(s)
 print("patched", path)
 
+# Patch Wayondroid AArch32 detection: ABI properties alone are not proof of kernel ELF32 support.
+upath = os.path.join(folder, "../utils/vine_utils.cpp")
+u = open(upath, encoding="utf-8").read()
+start = u.find("bool host_supports_aarch32() {")
+end = u.find("\nstd::vector<std::string> host_abi_list()", start)
+if start < 0 or end < 0:
+    raise SystemExit("host_supports_aarch32() layout changed; refusing unsafe patch")
+old_fn = u[start:end]
+if "NestBox kernel-first AArch32 detection" in old_fn:
+    raise SystemExit("already patched: start from a clean Wayondroid source")
+new_fn = '''bool host_supports_aarch32() {
+    // NestBox kernel-first AArch32 detection. Android ABI props can advertise
+    // ARM32 even when this execution environment cannot exec ARM32 ELF files.
+    auto cpuinfo = read_file("/proc/cpuinfo");
+    if (cpuinfo.has_value()) {
+        const bool supported = cpuinfo->find("aarch32_el0") != std::string::npos;
+        VINE_LOGI("AArch32: kernel cpuinfo aarch32_el0 -> %s", supported ? "supported" : "unsupported");
+        return supported;
+    }
+    static const char* knobs[] = {
+        "/proc/sys/abi/cp15_barrier_emulation",
+        "/proc/sys/abi/setend_emulation",
+        "/proc/sys/abi/swp_emulation",
+    };
+    for (const char* f : knobs) {
+        if (path_exists(f)) { VINE_LOGI("AArch32: kernel compat knob %s -> supported", f); return true; }
+    }
+    char buf[PROP_VALUE_MAX] = {};
+    __system_property_get("ro.product.cpu.abilist32", buf);
+    if (buf[0] != '\\0') { VINE_LOGW("AArch32: kernel evidence unavailable; abilist32 fallback '%s'", buf); return true; }
+    __system_property_get("ro.product.cpu.abilist", buf);
+    if (strstr(buf, "armeabi") != nullptr) { VINE_LOGW("AArch32: kernel evidence unavailable; abilist fallback '%s'", buf); return true; }
+    VINE_LOGI("AArch32: no kernel or ABI evidence -> unsupported");
+    return false;
+}'''
+u = u[:start] + new_fn + u[end:]
+open(upath, "w", encoding="utf-8").write(u)
+print("patched", upath)
 # rootless_instance.cpp: the shared folder joins the runtime's binds (init and exec alike)
 ipath = os.path.join(folder, "rootless_instance.cpp")
 t = open(ipath, encoding="utf-8").read()
