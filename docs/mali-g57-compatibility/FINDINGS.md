@@ -87,3 +87,16 @@ Test Build #61 first because it directly targets the fatal operation observed in
 - Which Mali kernel interface / JM UAPI version is present?
 - Is a compatible PanVK JM backend mature enough for this GPU?
 - Can a custom Vulkan ICD be loaded safely inside NestBox without disturbing Android's system Vulkan stack?
+
+
+## F-009 — Build #61 boots normally; no GPU-server exit reported
+**Status:** Positive user report; diagnostics not yet verified.
+
+User reports that Build #61 opened normally, reached the Android home screen, and had no GPU-server termination/exit during startup. The guest still has a little lag, described as barely noticeable. User suspects the low-performance profile and multiple host background apps may contribute; this has not been isolated or measured.
+
+Interpretation: The startup outcome is consistent with the R8/R16 non-AHB fallback avoiding Test4's fatal startup path. It is not yet proof of sustained GPU rendering, complete acceleration, or a performance gain. Await diagnostic archive/log evidence before declaring Test5 a full pass.
+
+## F-010 — Virtual RAM subjectively improves ROM/NestBox responsiveness
+**Status:** User observation; unbenchmarked.
+
+User reports that enabling phone virtual RAM appears to make ROMs/NestBox faster or smoother. The amount configured is unknown. Storage-backed swap may ease host memory pressure and reduce process reclaim/termination, but is slower than physical RAM and does not directly increase guest RAM allocation or GPU power. The perceived improvement and its cause remain unverified.
