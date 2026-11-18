@@ -295,7 +295,7 @@ if new_bpf not in s:
 # Put system-side ARM64 EGL implementations in Android's preferred vendor EGL
 # directory. Preserve any ROM/vendor implementation already installed there.
 egl_anchor = 'if (!write_mode(R + "/vendor/waydroid.prop", waydroid_prop(o.dpi, o.gpu), 0644, error)) return false;'
-egl_patch = egl_anchor + '\\n    if (!nb_stage_egl_drivers(R, error)) return false;'
+egl_patch = egl_anchor + '\n    if (!nb_stage_egl_drivers(R, error)) return false;'
 if egl_patch not in s:
     if egl_anchor not in s:
         raise SystemExit("vendor waydroid.prop write not found; refusing EGL staging patch")
