@@ -1,10 +1,10 @@
 #!/bin/bash
-# Builds Wayondroid's tawcroot (MIT) for arm64 with Nestbox's patch and stages it as
+# Builds Wayondroid's tawcroot (MIT) for arm64 with Nestbox's patches and stages it as
 # app/src/main/jniLibs/arm64-v8a/libtawcroot.so. Same flags as Wayondroid's tawcroot/build.sh.
 #
 # Usage: scripts/build_tawcroot.sh <wayondroid-source-dir> <ndk-dir>
 #   source: https://codeload.github.com/yoro1836/wayondroid/tar.gz/a45f80b (the bundled build)
-#   patch:  scripts/patch_tawcroot.py is applied to tawcroot/src/syscalls_fd.c first
+#   patches: scripts/patch_tawcroot.py, patch_tawcroot_fd_floor.py and patch_tawcroot_uevent.py
 set -euo pipefail
 
 SRC="$1/tawcroot"
@@ -19,6 +19,9 @@ CC=("$BIN/clang" --target=aarch64-linux-android29)
 
 PY="$(command -v python3 || command -v python)"
 grep -q nb_drop_dead_fds "$SRC/src/syscalls_fd.c" || "$PY" -I "$HERE/patch_tawcroot.py" "$SRC/src/syscalls_fd.c"
+"$PY" -I "$HERE/patch_tawcroot_uevent.py" "$SRC/src/syscalls_socket.c"
+"$PY" -I "$HERE/patch_tawcroot_fd_floor.py" "$SRC/include/fdtab.h"
+echo "tawcroot guest datagram socket floor: $(grep TAWCROOT_RESERVED_FD_BASE "$SRC/include/fdtab.h" | head -1)"
 
 SOURCES=(sysv_sem sysv_shm proc_tcp namespace cgroup mounts uts netemu blocking ports main io strings
   filter filter_build handler dispatch rescue path path_scratch path_fold path_orchestrate path_resolve
