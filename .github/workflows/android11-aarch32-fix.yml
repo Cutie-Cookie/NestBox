@@ -356,9 +356,16 @@ jobs:
           )
           for lib in "${REQUIRED[@]}"; do
             test -s "$JNI/$lib" || { echo "::error::Missing or empty native library: $JNI/$lib"; exit 1; }
-            "$ANDROID_HOME/ndk/28.2.13676358/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf" -h "$JNI/$lib" | grep -q "AArch64" || {
-              echo "::error::Not an AArch64 ELF library: $lib"; exit 1;
+            ELF_HEADER="$("$ANDROID_HOME/ndk/28.2.13676358/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf" -h "$JNI/$lib" 2>&1)" || {
+              echo "::error::Could not inspect ELF header: $lib"
+              printf '%s\\n' "$ELF_HEADER"
+              exit 1
             }
+            if ! grep -Fq "AArch64" <<< "$ELF_HEADER"; then
+              echo "::error::Not an AArch64 ELF library: $lib"
+              printf '%s\\n' "$ELF_HEADER"
+              exit 1
+            fi
             echo "Verified $lib ($(stat -c %s "$JNI/$lib") bytes)"
           done
 
