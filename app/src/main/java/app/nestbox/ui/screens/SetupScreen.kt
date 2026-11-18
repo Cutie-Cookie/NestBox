@@ -63,7 +63,7 @@ fun SetupScreen(vm: AppViewModel, nav: NavHostController) {
         Check("battery", NbIcons.BatterySaver, "Battery: No restrictions", "App info › Battery saver"),
         Check("recents", NbIcons.Lock, "Lock in Recents", "Long-press Nestbox card › Lock"),
         Check("popup", NbIcons.Pip, "Floating windows", "Other permissions › Display pop-up"),
-        // Approved addition: HyperOS kills guest processes past 32 unless this limit is off.
+        // Host process limit is already disabled; keep this check satisfied by default.
         Check("processes", NbIcons.DeveloperMode, "Background process limit", "Developer options › Wireless debugging"),
     )
     val isDone = { c: Check -> if (c.key == null) engineOk else done[c.key] == true }
