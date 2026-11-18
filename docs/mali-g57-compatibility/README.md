@@ -24,3 +24,7 @@ This directory is the working record for bringing NestBox's accelerated graphics
 **Documentation only.** Branch created from Build #61. No source-code changes on this branch yet. Build #61 is the current candidate to test for the R8_UNORM / Android Hardware Buffer fallback.
 
 Last updated: 2026-11-17
+
+
+## Status update — 2026-11-18
+Build #61 has an initial positive user report: it opens normally, reaches the guest home screen, and the GPU server reportedly does not exit during startup. The guest has slight, barely noticeable lag. This is not yet diagnostics-confirmed hardware-rendering acceptance; the Test5 archive/logs remain pending.
