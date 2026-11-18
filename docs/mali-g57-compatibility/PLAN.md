@@ -77,3 +77,10 @@ After stable acceleration:
 - Performance is measurably better than software rendering.
 - No regression to Vulkan dispatch or mDNS fixes.
 - APK is signed with permanent NestBox certificate and independently verified.
+
+
+## 2026-11-18 update — Baseline startup is promising
+- User reports Build #61 starts normally, reaches Android home, and has no GPU-server exit during startup. This is an initial positive result, not a diagnostics-confirmed GPU pass.
+- User reports slight, barely noticeable lag; possible contributors mentioned are low-performance mode and host background apps. No cause has been isolated.
+- Keep Build #61 in place. Next priority is optional diagnostics verification and sustained rendering confirmation, not another reinstall or immediate patch.
+- Record virtual RAM as a user-observed possible host-memory-pressure improvement, but do not treat it as proven or as a guest RAM/GPU upgrade.
