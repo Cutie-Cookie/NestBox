@@ -35,7 +35,7 @@ jobs:
             echo "::error::Signing secrets are missing or unavailable to this workflow run."
             exit 1
           fi
-          printf '%s' "$KEYSTORE_B64" | tr -d '\\r\\n ' |tr -d '[:space:]' | base64 --decode > signing.keystore
+          printf '%s' "$KEYSTORE_B64" | tr -d '[:space:]' | base64 --decode > signing.keystore
           if ! keytool -list -keystore signing.keystore -storepass "$STORE_PASSWORD" >/dev/null 2>&1; then
             echo "::error::ANDROID_KEYSTORE_BASE64 decoded to an invalid keystore or ANDROID_KEYSTORE_PASSWORD is incorrect. Re-encode the original .jks/.keystore file as Base64."
             exit 1
