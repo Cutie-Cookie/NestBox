@@ -62,3 +62,13 @@ No runtime fix is considered successful until a device test log confirms the gue
 - Build #45 compared locally against downloaded Build61 baseline: 286 APK entries both; no missing entries and no added entries. Exactly 3 non-signature payload entries changed: `classes5.dex`, `classes9.dex`, and `lib/arm64-v8a/libvine_helper.so`; original preserved `assets/nestbox/original/classes14.dex` remains byte-identical.
 - Local `jarsigner -verify` exited 0, but its output warns that Android APK entries are not fully represented in JarInputStream verification; therefore Android v3 signature validation is credited to CI's `apksigner`, not local jarsigner.
 - Build #45 is the corrected APK candidate, **runtime not yet confirmed**. Test3 failure remains the last device evidence; test4 should specifically check that prepare.log no longer reports `bpfloader.rc has no reboot_on_failure option to remove`, then capture boot state/logs and any new failure.
+
+
+## Step 6 — 2026-11-18: X11-test4 advances boot to graphics startup, but SurfaceFlinger loops
+- User reports Test4 remained at “Starting” for a couple minutes, then was manually shut down. No explicit UI error was displayed; RAM use rose to about 0.4 GB compared with roughly 0.1 GB in prior tests.
+- Archive X11-test4.zip inspected. BPF fatal reboot is no longer the dominant observed blocker; system_server starts and enters boot_progress_system_run.
+- **New main blocker:** SurfaceFlinger and vendor composer repeatedly abort. Crash message: couldn't find an OpenGL ES implementation, make sure you set ro.hardware.egl or ro.board.platform. SurfaceFlinger cannot register/start, and system_server loops waiting for the SurfaceFlinger service. This is the current boot-stall cause indicated by the logs.
+- Additional repetitive crashes: Clearkey DRM factory cannot register its HAL service (registerAsService("clearkey") fails). Track separately; don't disable unrelated components.
+- Device archive has repeated tombstones from restart loops. Test4 is not a successful boot.
+- User requests Xiaomi setup check Background process limit be checked by default because their phone's setting is already changed. Changed SetupScreen.kt comment and AppViewModel.refreshSetup() to report this check satisfied by default, so setup no longer asks for Wireless Debugging pairing to change the limit. The rest of the setup checks remain unchanged.
+- Next investigation: determine how this rootless graphics stack selects EGL/GLES libraries and what properties/host bridge are required; inspect the Android 13 guest's graphics vendor files and rootless runtime environment before applying a targeted graphics fix. Do not remove native graphics libraries or disable SurfaceFlinger to bypass the crash.
