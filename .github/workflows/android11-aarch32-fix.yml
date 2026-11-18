@@ -20,28 +20,25 @@ jobs:
           packages: platform-tools
       - name: Install Android SDK components
         run: sdkmanager "platforms;android-35" "build-tools;35.0.0" "cmake;3.22.1" "ndk;28.2.13676358"
-      - name: Restore and validate signing key
+      - name: Restore signing key and derive alias
         env:
-          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
-          STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
-          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          KEYSTORE_B64: ${{ secrets.NESTBOX_KEYSTORE_BASE64 }}
+          STORE_PASSWORD: ${{ secrets.NESTBOX_KEYSTORE_PASSWORD }}
         run: |
           set -euo pipefail
-          if [ -z "$KEYSTORE_B64" ] || [ -z "$STORE_PASSWORD" ] || [ -z "$KEY_ALIAS" ] || [ -z "$KEY_PASSWORD" ]; then
-            echo "::error::Signing secrets are missing or unavailable to this workflow run."
+          if [ -z "$KEYSTORE_B64" ] || [ -z "$STORE_PASSWORD" ]; then
+            echo "::error::NESTBOX_KEYSTORE_BASE64 or NESTBOX_KEYSTORE_PASSWORD is unavailable to this workflow."
             exit 1
           fi
           printf '%s' "$KEYSTORE_B64" | tr -d '[:space:]' | base64 --decode > signing.keystore
-          if ! keytool -list -keystore signing.keystore -storepass "$STORE_PASSWORD" >/dev/null 2>&1; then
-            echo "::error::ANDROID_KEYSTORE_BASE64 decoded to an invalid keystore or ANDROID_KEYSTORE_PASSWORD is incorrect. Re-encode the original .jks/.keystore file as Base64."
-            exit 1
-          fi
-          if ! keytool -list -keystore signing.keystore -storepass "$STORE_PASSWORD" -alias "$KEY_ALIAS" >/dev/null 2>&1; then
-            echo "::error::ANDROID_KEY_ALIAS does not exist in the restored keystore or ANDROID_KEY_PASSWORD is incorrect."
+          KEY_ALIAS="$(keytool -list -v -keystore signing.keystore -storepass "$STORE_PASSWORD" 2>/dev/null | awk -F': ' '/Alias name:/{print $2; exit}')"
+          if [ -z "$KEY_ALIAS" ]; then
+            echo "::error::Could not read alias from keystore. Check the Base64 data and keystore password."
             exit 1
           fi
           echo "SIGNING_STORE_FILE=$PWD/signing.keystore" >> "$GITHUB_ENV"
+          echo "SIGNING_KEY_ALIAS=$KEY_ALIAS" >> "$GITHUB_ENV"
+          echo "Signing alias identified (name not printed)."
       - name: Fetch pinned Wayondroid engine
         run: python3 scripts/fetch_engines.py
       - name: Build rootless helper
@@ -51,12 +48,12 @@ jobs:
           tar -xzf build/wayondroid.tar.gz -C build/src
           bash scripts/build_tawcroot.sh build/src/wayondroid-a45f80b "$ANDROID_HOME/ndk/28.2.13676358"
           bash scripts/build_helper.sh build/src/wayondroid-a45f80b "$ANDROID_HOME"
-      - name: Build APK with original signing key
+      - name: Build APK using repository signing key
         env:
           SIGNING_STORE_FILE: ${{ env.SIGNING_STORE_FILE }}
-          SIGNING_STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-          SIGNING_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
-          SIGNING_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          SIGNING_STORE_PASSWORD: ${{ secrets.NESTBOX_KEYSTORE_PASSWORD }}
+          SIGNING_KEY_ALIAS: ${{ env.SIGNING_KEY_ALIAS }}
+          SIGNING_KEY_PASSWORD: ${{ secrets.NESTBOX_KEYSTORE_PASSWORD }}
         run: ./gradlew --no-daemon assembleDebug
       - name: Upload APK
         uses: actions/upload-artifact@v4
