@@ -104,6 +104,72 @@ bool nb_copy_tree(const std::string& src, const std::string& dst, std::string* e
     return ok;
 }
 
+// Stage only guest-side ARM64 EGL/GLES drivers into Android's preferred vendor namespace.
+// GSI and emulator trees sometimes keep their EGL implementation under /system/lib64/egl,
+// while libEGL's native-driver loader searches /vendor/lib64/egl. Never follow a guest
+// symlink here: rootfs absolute symlinks resolve against the phone when accessed by the host.
+bool nb_arm64_elf(const std::string& path) {
+    const auto h = read_file_prefix(path, 20);
+    if (!h || h->size() < 20) return false;
+    const auto* p = reinterpret_cast<const unsigned char*>(h->data());
+    return p[0] == 0x7f && p[1] == 'E' && p[2] == 'L' && p[3] == 'F' &&
+           p[4] == 2 && p[18] == 183 && p[19] == 0; // ELF64, EM_AARCH64
+}
+
+bool nb_egl_driver_name(const std::string& n) {
+    if (n.size() < 4 || n.compare(n.size() - 3, 3, ".so") != 0 || n == "libGLES_android.so") return false;
+    return n == "libGLES.so" || n == "libEGL.so" || n == "libGLESv1_CM.so" ||
+           n == "libGLESv2.so" || n.rfind("libGLES_", 0) == 0 ||
+           n.rfind("libGLESv1_CM_", 0) == 0 || n.rfind("libGLESv2_", 0) == 0 ||
+           n.rfind("libEGL_", 0) == 0;
+}
+
+bool nb_stage_egl_drivers(const std::string& R, std::string* error) {
+    const std::string vendor = R + "/vendor";
+    struct stat vst{};
+    if (lstat(vendor.c_str(), &vst) != 0 || !S_ISDIR(vst.st_mode)) {
+        fprintf(stderr, "NestBox EGL: vendor root is not a real directory; refusing host-side symlink traversal\n");
+        return true;
+    }
+    const std::string dst = vendor + "/lib64/egl";
+    const std::string sources[] = {R + "/system/lib64/egl", R + "/system/lib64"};
+    int copied = 0;
+    for (const auto& src : sources) {
+        struct stat st{};
+        if (lstat(src.c_str(), &st) != 0 || !S_ISDIR(st.st_mode)) continue;
+        DIR* d = opendir(src.c_str());
+        if (!d) continue;
+        while (dirent* e = readdir(d)) {
+            const std::string n = e->d_name;
+            if (n == "." || n == ".." || !nb_egl_driver_name(n)) continue;
+            const std::string from = src + "/" + n;
+            const std::string to = dst + "/" + n;
+            struct stat fs{}, ts{};
+            if (lstat(from.c_str(), &fs) != 0 || !S_ISREG(fs.st_mode) || !nb_arm64_elf(from)) continue;
+            // A ROM/vendor driver already at the canonical path always wins.
+            if (lstat(to.c_str(), &ts) == 0) continue;
+            if (!mkdirs_or_fail(dst, error) || !copy_mode(from, to, 0644, error)) {
+                closedir(d);
+                return false;
+            }
+            ++copied;
+            fprintf(stderr, "NestBox EGL: staged %s -> vendor/lib64/egl/%s\n", from.c_str(), n.c_str());
+        }
+        closedir(d);
+    }
+    fprintf(stderr, "NestBox EGL: staged %d ARM64 driver libraries; vendor/lib64/egl inventory:", copied);
+    DIR* d = opendir(dst.c_str());
+    if (d) {
+        while (dirent* e = readdir(d)) {
+            const std::string n = e->d_name;
+            if (nb_egl_driver_name(n)) fprintf(stderr, " %s", n.c_str());
+        }
+        closedir(d);
+    }
+    fprintf(stderr, "\n");
+    return true;
+}
+
 // nestbox.remove deleted, nestbox.prop into a marked block of /system/product/etc/build.prop,
 // nestbox.files copied, the shared folder mount
 bool nb_apply_overlay(const Layout& l, std::string* error) {
@@ -224,6 +290,16 @@ new_bpf = """    // Rootless hosts cannot reliably grant BPF kernel capabilities
 if new_bpf not in s:
     if old_bpf not in s: raise SystemExit("bpfloader replacement anchor not found in upstream patch script")
     s=s.replace(old_bpf,new_bpf,1)
+
+
+# Put system-side ARM64 EGL implementations in Android's preferred vendor EGL
+# directory. Preserve any ROM/vendor implementation already installed there.
+egl_anchor = 'if (!write_mode(R + "/vendor/waydroid.prop", waydroid_prop(o.dpi, o.gpu), 0644, error)) return false;'
+egl_patch = egl_anchor + '\\n    if (!nb_stage_egl_drivers(R, error)) return false;'
+if egl_patch not in s:
+    if egl_anchor not in s:
+        raise SystemExit("vendor waydroid.prop write not found; refusing EGL staging patch")
+    s = s.replace(egl_anchor, egl_patch, 1)
 
 open(path, "w", encoding="utf-8").write(s)
 print("patched", path)
