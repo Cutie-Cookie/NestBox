@@ -51,6 +51,11 @@ import app.nestbox.bridge.SharedFolder
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import java.security.MessageDigest
+import java.util.zip.ZipFile
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 
 data class WizardDraft(
     val engine: String = Catalog.MODERN,
@@ -294,8 +299,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     fun updateSettings(change: (AppSettings) -> AppSettings) = app.settings.update(change)
 
     /**
-     * Exports the catalog's Android 13 + Google ROM as a .vrom file through the system document
-     * picker. The catalog source is the GApps build, so Play services and Play Store stay inside.
+     * Exports the original NestBox VROM archive without converting it to a raw GSI.
+     * Validate its manifest and image hashes first so Google apps and all image metadata
+     * remain byte-for-byte intact for another NestBox import.
      */
     fun exportAndroid13Rom(destination: Uri) {
         if (_romExporting.value) return
@@ -305,14 +311,49 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             val result = runCatching {
                 withContext(Dispatchers.IO) {
                     val rom = Catalog.rom("a13gapps")
+                    if (!rom.gms) throw IOException("The selected catalog ROM is not the Google-apps build.")
                     val source = RomStore(app).existingFile(rom)
                         ?: throw IOException("Android 13 + Google is not downloaded yet. Start an Android 13 + Google machine first.")
-                    val expected = (rom.source as? Catalog.Source.File)?.bytes ?: source.length()
-                    if (source.length() != expected) throw IOException("The downloaded ROM is incomplete.")
+                    val sourceInfo = rom.source as? Catalog.Source.File
+                        ?: throw IOException("The Android 13 ROM source metadata is unavailable.")
+                    if (source.length() != sourceInfo.bytes) throw IOException("The downloaded ROM is incomplete.")
+                    val sourceSha = RomStore.sha256(source)
+                    if (!sourceSha.equals(sourceInfo.sha256, true)) throw IOException("The downloaded ROM checksum does not match the Google-enabled catalog image.")
+
+                    // This is NestBox's VROM container: manifest.json + system.img,
+                    // and optional vendor.img. A raw GSI or renamed ZIP is not equivalent.
+                    ZipFile(source).use { zip ->
+                        val manifest = zip.getEntry("manifest.json")
+                            ?: throw IOException("The ROM is missing manifest.json; it is not a valid NestBox .vrom.")
+                        val manifestText = zip.getInputStream(manifest).bufferedReader().use { it.readText() }
+                        val hashes = runCatching {
+                            Json.parseToJsonElement(manifestText).jsonObject["sha256"]?.jsonObject
+                                ?.mapValues { it.value.jsonPrimitive.content }
+                        }.getOrNull() ?: throw IOException("The ROM manifest has no valid SHA-256 image map.")
+                        val system = zip.getEntry("system.img")
+                            ?: throw IOException("The ROM is missing system.img.")
+                        val images = listOfNotNull("system.img" to system, zip.getEntry("vendor.img")?.let { "vendor.img" to it })
+                        for ((name, entry) in images) {
+                            val expected = hashes[name]
+                                ?: throw IOException("The ROM manifest has no checksum for $name.")
+                            val digest = MessageDigest.getInstance("SHA-256")
+                            zip.getInputStream(entry).use { input ->
+                                val buffer = ByteArray(1 shl 20)
+                                while (true) {
+                                    val n = input.read(buffer)
+                                    if (n < 0) break
+                                    digest.update(buffer, 0, n)
+                                }
+                            }
+                            val actual = digest.digest().joinToString("") { "%02x".format(it) }
+                            if (!actual.equals(expected, true)) throw IOException("$name failed its manifest checksum.")
+                        }
+                    }
+
                     val output = app.contentResolver.openOutputStream(destination, "w")
                         ?: throw IOException("The selected save location could not be opened.")
-                    source.inputStream().buffered(1 shl 20).use { input ->
-                        output.buffered(1 shl 20).use { out ->
+                    output.use { out ->
+                        source.inputStream().buffered(1 shl 20).use { input ->
                             val buffer = ByteArray(1 shl 20)
                             var copied = 0L
                             var lastUpdate = 0L
@@ -323,19 +364,32 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                                 copied += count
                                 if (copied - lastUpdate >= 8_000_000L) {
                                     lastUpdate = copied
-                                    _romExportProgress.value = (copied.toFloat() / expected).coerceIn(0f, 1f)
+                                    _romExportProgress.value = (copied.toFloat() / sourceInfo.bytes).coerceIn(0f, 1f)
                                 }
                             }
-                            out.flush()
-                            if (copied != expected) throw IOException("The ROM export was incomplete.")
+                            if (copied != sourceInfo.bytes) throw IOException("The ROM export was incomplete.")
                         }
                     }
+
+                    // Read the destination back through the document provider. This catches
+                    // providers that truncate large files despite a successful write call.
+                    val savedSha = app.contentResolver.openInputStream(destination)?.use { input ->
+                        val digest = MessageDigest.getInstance("SHA-256")
+                        val buffer = ByteArray(1 shl 20)
+                        while (true) {
+                            val n = input.read(buffer)
+                            if (n < 0) break
+                            digest.update(buffer, 0, n)
+                        }
+                        digest.digest().joinToString("") { "%02x".format(it) }
+                    } ?: throw IOException("The saved file could not be reopened for verification.")
+                    if (!savedSha.equals(sourceInfo.sha256, true)) throw IOException("The saved .vrom did not pass its read-back checksum.")
                 }
             }
             _romExporting.value = false
             result.onSuccess {
                 _romExportProgress.value = 1f
-                showToast("Android 13 + Google exported · .vrom")
+                showToast("Verified NestBox VROM exported · Google apps included")
             }.onFailure {
                 showToast(it.message ?: "Could not export the Android 13 ROM")
             }
