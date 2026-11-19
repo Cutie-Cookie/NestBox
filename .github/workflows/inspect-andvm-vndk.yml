@@ -1,0 +1,82 @@
+name: Inspect Android 13 VROM VNDK metadata
+
+on:
+  push:
+    branches:
+      - inspect-andvm-vndk
+    paths:
+      - .github/workflows/inspect-andvm-vndk.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - name: Install image inspection tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y e2fsprogs android-sdk-libsparse-utils unzip
+
+      - name: Download and verify the exact Android 13 Google ROM
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --location --retry 4 --retry-all-errors \
+            "https://github.com/yoro1836/wayondroid/releases/download/rom-GAPPS/waydroid-lineage20-gapps.vrom" \
+            -o /tmp/waydroid-gapps.vrom
+          echo "2c5fed8e18a9c8b5857c12bc4f0b564a7501df1ba02163c7cd052bbe6a48cc57  /tmp/waydroid-gapps.vrom" | sha256sum -c -
+          unzip -p /tmp/waydroid-gapps.vrom system.img > /tmp/system.img
+          unzip -p /tmp/waydroid-gapps.vrom vendor.img > /tmp/vendor.img
+          file /tmp/system.img /tmp/vendor.img
+
+      - name: Inspect product and vendor VNDK properties
+        shell: bash
+        run: |
+          set -euo pipefail
+          image=/tmp/system.img
+          magic="$(od -An -N4 -tx1 /tmp/system.img | tr -d ' \n')"
+          if [[ "$magic" == "3aff26ed" ]]; then
+            echo "system.img is Android sparse; converting for read-only inspection"
+            simg2img /tmp/system.img /tmp/system.raw.img
+            image=/tmp/system.raw.img
+          fi
+          echo "=== SYSTEM ROOT ==="
+          debugfs -R "ls -l /" "$image" 2>&1 | head -80 || true
+          echo "=== PRODUCT CANDIDATE DIRECTORIES ==="
+          for path in /system/product/etc /product/etc /system/system/product/etc; do
+            echo "--- $path"
+            debugfs -R "ls -l $path" "$image" 2>&1 | head -60 || true
+          done
+          found=0
+          for path in /system/product/etc/build.prop /product/etc/build.prop /system/system/product/etc/build.prop; do
+            if debugfs -R "stat $path" "$image" 2>&1 | grep -q "Inode:"; then
+              echo "=== PRODUCT BUILD.PROP: $path ==="
+              debugfs -R "dump $path /tmp/product-build.prop" "$image"
+              grep -nE '^(ro\.product\.vndk\.version|ro\.build\.version\.sdk|ro\.product\.first_api_level)=' /tmp/product-build.prop || true
+              found=1
+              break
+            fi
+          done
+          if [[ "$found" == "0" ]]; then
+            echo "ERROR: no product build.prop found in the system image"
+            exit 2
+          fi
+
+          vendor=/tmp/vendor.img
+          vmagic="$(od -An -N4 -tx1 "$vendor" | tr -d ' \n')"
+          if [[ "$vmagic" == "3aff26ed" ]]; then
+            simg2img "$vendor" /tmp/vendor.raw.img
+            vendor=/tmp/vendor.raw.img
+          fi
+          echo "=== VENDOR DEFAULT/BUILD PROPERTIES ==="
+          for path in /default.prop /vendor/default.prop /build.prop /vendor/build.prop; do
+            if debugfs -R "stat $path" "$vendor" 2>&1 | grep -q "Inode:"; then
+              echo "--- $path"
+              debugfs -R "dump $path /tmp/vendor-prop.tmp" "$vendor"
+              grep -nE '^(ro\.vndk\.version|ro\.build\.version\.sdk)=' /tmp/vendor-prop.tmp || true
+            fi
+          done
