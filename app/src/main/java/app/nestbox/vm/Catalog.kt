@@ -36,10 +36,10 @@ object Catalog {
     val roms = listOf(
         Rom(
             "a13gapps", MODERN, "Android 13 + Google", "BETA", "13 GApps",
-            "LineageOS 20 · Play Store · 1.2 GB download", "1.2 GB",
+            "LineageOS 20 · Play Store · 1.24 GB download", "1.24 GB",
             Source.File(
-                "https://github.com/yoro1836/wayondroid/releases/download/rom-GAPPS/waydroid-lineage20-gapps.vrom",
-                "2c5fed8e18a9c8b5857c12bc4f0b564a7501df1ba02163c7cd052bbe6a48cc57", 1_157_079_790,
+                "https://github.com/Cutie-Cookie/NestBox/releases/download/rom-GAPPS-andvm/waydroid-lineage20-gapps-andvm.vrom",
+                "76753a972a578045158100a8350def4fef8f1ae7ce9df457d79ef21d6a52b19d", 1_243_381_194,
             ),
             gms = true,
         ),
@@ -90,12 +90,10 @@ object Catalog {
      * Copies of the downloads on NestBox's GitHub (release "roms", uploaded with
      * scripts/rom/mirror_roms.sh). Used when the original host fails; same SHA-256 checks.
      */
-    private const val MIRROR = "https://github.com/rifatrajbd/NestBox-An-Android-Emulator-Support-Lineage-OS/releases/download/roms/"
-    private val MIRRORS = mapOf(
-        "https://github.com/yoro1836/wayondroid/releases/download/rom-GAPPS/waydroid-lineage20-gapps.vrom" to "a13gapps-system.vrom",
-    )
+    // The previous public mirror is the unpatched VROM; never fall back to it.
+    private val MIRRORS = emptyMap<String, String>()
 
-    fun mirrorOf(url: String): String? = MIRRORS[url]?.let { MIRROR + it }
+    fun mirrorOf(url: String): String? = MIRRORS[url]
 
     /** Old ROM ids from phase 1–2 builds map onto what exists now. */
     /** Systems that no longer exist (Classic 8.1, the Pixel Experience port) map onto Android 13. */
