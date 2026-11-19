@@ -115,7 +115,7 @@ fun SettingsScreen(vm: AppViewModel, nav: NavHostController) {
             Item.Link(
                 NbIcons.UploadFile, "Export Android 13 + Google",
                 if (exportingRom) "Saving .vrom · ${(romExportProgress * 100).toInt()}%"
-                else "Save the downloaded Play Store ROM as a .vrom file",
+                else "Export verified NestBox .vrom · system image + Google apps (not a raw GSI)",
             ) {
                 if (!exportingRom) exportRom.launch("Android13-Google.vrom")
             },
