@@ -138,7 +138,9 @@ fun WizardScreen(vm: AppViewModel, nav: NavHostController) {
                             NbIcon(NbIcons.preset(p.id), 22.dp, if (sel) Nb.Accent else Nb.Text3)
                             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
                                 Text(p.name, style = ui(Nb.T15, 500))
-                                Text(p.sub, style = mono(Nb.T11))
+                                Text(if (p.id == "unlimited")
+                                    "${vm.host.cpuCores} logical cores available · no RAM cap · up to ${vm.host.maxRefreshRate} Hz"
+                                else p.sub, style = mono(Nb.T11))
                             }
                         }
                     }
@@ -151,7 +153,7 @@ fun WizardScreen(vm: AppViewModel, nav: NavHostController) {
                         }
                     }
                     Text(
-                        if (d.preset == "unlimited") "Hardware max uses all ${vm.host.cpuCores} logical cores, up to ${vm.host.guestRamGb} GB of guest memory, and the display's ${vm.host.maxRefreshRate} Hz ceiling. Android keeps 10% of RAM for itself." else "Limits are caps, not reservations. The machine shares the phone's kernel and only uses what it needs.",
+                        if (d.preset == "unlimited") "Hardware max adds no CPU or RAM cap. Android schedules the guest across the phone's available cores; guest memory is not capped by NestBox, so Android and the phone's physical memory remain the only limits. Display refresh follows the phone's supported maximum (${vm.host.maxRefreshRate} Hz)." else "Limits are caps, not reservations. The machine shares the phone's kernel and only uses what it needs.",
                         style = ui(Nb.T12, 400, Nb.Text3).copy(lineHeight = Nb.T12 * 1.45),
                         modifier = Modifier.padding(horizontal = 4.dp),
                     )
@@ -170,7 +172,7 @@ fun WizardScreen(vm: AppViewModel, nav: NavHostController) {
                     CardRows(
                         listOf(
                             "Name" to d.name, "System" to rom.name, "Preset" to p.name,
-                            "Limits" to "${p.cores} cores · ${p.ramGb} GB", "Display" to "${d.res} · ${p.fps} fps",
+                            "Limits" to if (d.preset == "unlimited") "No CPU/RAM cap" else "${p.cores} cores · ${p.ramGb} GB", "Display" to "${d.res} · ${p.fps} fps",
                             "Extras" to (extras.joinToString(" · ").ifEmpty { "None" }),
                         )
                     ) { (k, v) -> KeyValueRow(k, v) }
