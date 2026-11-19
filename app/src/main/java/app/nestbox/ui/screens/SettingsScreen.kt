@@ -1,5 +1,7 @@
 package app.nestbox.ui.screens
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -62,6 +64,11 @@ private sealed interface Item {
 @Composable
 fun SettingsScreen(vm: AppViewModel, nav: NavHostController) {
     val s by vm.settings.collectAsStateWithLifecycle()
+    val exportingRom by vm.romExporting.collectAsStateWithLifecycle()
+    val romExportProgress by vm.romExportProgress.collectAsStateWithLifecycle()
+    val exportRom = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/octet-stream"),
+    ) { uri -> if (uri != null) vm.exportAndroid13Rom(uri) }
     var dialog by remember { mutableStateOf<Item.Choice?>(null) }
 
     val sections = listOf(
@@ -104,6 +111,16 @@ fun SettingsScreen(vm: AppViewModel, nav: NavHostController) {
             Item.Link(NbIcons.Tune, "Xiaomi setup", "Autostart, battery, floating windows, process limit") { nav.navigate(Routes.Setup) },
             Item.Info(NbIcons.Memory, vm.host.deviceName, "${vm.host.socName} · ${vm.host.gpu} · ${vm.host.ramGb} GB · ${vm.host.osVersion}"),
         ),
+        "ROM tools" to listOf(
+            Item.Link(
+                NbIcons.UploadFile, "Export Android 13 + Google",
+                if (exportingRom) "Saving .vrom · ${(romExportProgress * 100).toInt()}%"
+                else "Save the downloaded Play Store ROM as a .vrom file",
+            ) {
+                if (!exportingRom) exportRom.launch("Android13-Google.vrom")
+            },
+        ),
+
         "About" to listOf(
             Item.Info(NbIcons.Info, "Nestbox", "${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})"),
             Item.Info(
