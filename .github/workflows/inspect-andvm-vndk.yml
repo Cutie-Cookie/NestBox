@@ -1,4 +1,4 @@
-name: Inspect Android 13 VROM VNDK metadata
+name: Patch Android 13 Google VROM for AndVM
 
 on:
   push:
@@ -9,74 +9,154 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
-  inspect:
+  patch:
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
+    timeout-minutes: 60
     steps:
-      - name: Install image inspection tools
+      - name: Install image and archive tools
         run: |
           sudo apt-get update
           sudo apt-get install -y e2fsprogs android-sdk-libsparse-utils unzip
 
-      - name: Download and verify the exact Android 13 Google ROM
+      - name: Download and verify the original Google-enabled ROM
         shell: bash
         run: |
           set -euo pipefail
           curl --fail --location --retry 4 --retry-all-errors \
             "https://github.com/yoro1836/wayondroid/releases/download/rom-GAPPS/waydroid-lineage20-gapps.vrom" \
-            -o /tmp/waydroid-gapps.vrom
-          echo "2c5fed8e18a9c8b5857c12bc4f0b564a7501df1ba02163c7cd052bbe6a48cc57  /tmp/waydroid-gapps.vrom" | sha256sum -c -
-          unzip -p /tmp/waydroid-gapps.vrom system.img > /tmp/system.img
-          unzip -p /tmp/waydroid-gapps.vrom vendor.img > /tmp/vendor.img
+            -o /tmp/waydroid-gapps-original.vrom
+          echo "2c5fed8e18a9c8b5857c12bc4f0b564a7501df1ba02163c7cd052bbe6a48cc57  /tmp/waydroid-gapps-original.vrom" | sha256sum -c -
+          unzip -p /tmp/waydroid-gapps-original.vrom system.img > /tmp/system.img
+          unzip -p /tmp/waydroid-gapps-original.vrom vendor.img > /tmp/vendor.img
           file /tmp/system.img /tmp/vendor.img
 
-      - name: Inspect product and vendor VNDK properties
+      - name: Add the matching product VNDK version without changing ROM apps
         shell: bash
         run: |
           set -euo pipefail
-          image=/tmp/system.img
-          magic="$(od -An -N4 -tx1 /tmp/system.img | tr -d ' \n')"
-          if [[ "$magic" == "3aff26ed" ]]; then
-            echo "system.img is Android sparse; converting for read-only inspection"
-            simg2img /tmp/system.img /tmp/system.raw.img
-            image=/tmp/system.raw.img
+          system=/tmp/system.img
+          smagic="$(od -An -N4 -tx1 "$system" | tr -d ' \n')"
+          if [[ "$smagic" == "3aff26ed" ]]; then
+            simg2img "$system" /tmp/system.raw.img
+            system=/tmp/system.raw.img
           fi
-          echo "=== SYSTEM ROOT ==="
-          debugfs -R "ls -l /" "$image" 2>&1 | head -80 || true
-          echo "=== PRODUCT CANDIDATE DIRECTORIES ==="
-          for path in /system/product/etc /product/etc /system/system/product/etc; do
-            echo "--- $path"
-            debugfs -R "ls -l $path" "$image" 2>&1 | head -60 || true
-          done
-          found=0
-          for path in /system/product/etc/build.prop /product/etc/build.prop /system/system/product/etc/build.prop; do
-            if debugfs -R "stat $path" "$image" 2>&1 | grep -q "Inode:"; then
-              echo "=== PRODUCT BUILD.PROP: $path ==="
-              debugfs -R "dump $path /tmp/product-build.prop" "$image"
-              grep -nE '^(ro\.product\.vndk\.version|ro\.build\.version\.sdk|ro\.product\.first_api_level)=' /tmp/product-build.prop || true
-              found=1
-              break
-            fi
-          done
-          if [[ "$found" == "0" ]]; then
-            echo "ERROR: no product build.prop found in the system image"
-            exit 2
-          fi
-
           vendor=/tmp/vendor.img
           vmagic="$(od -An -N4 -tx1 "$vendor" | tr -d ' \n')"
           if [[ "$vmagic" == "3aff26ed" ]]; then
             simg2img "$vendor" /tmp/vendor.raw.img
             vendor=/tmp/vendor.raw.img
           fi
-          echo "=== VENDOR DEFAULT/BUILD PROPERTIES ==="
-          for path in /default.prop /vendor/default.prop /build.prop /vendor/build.prop; do
-            if debugfs -R "stat $path" "$vendor" 2>&1 | grep -q "Inode:"; then
-              echo "--- $path"
-              debugfs -R "dump $path /tmp/vendor-prop.tmp" "$vendor"
-              grep -nE '^(ro\.vndk\.version|ro\.build\.version\.sdk)=' /tmp/vendor-prop.tmp || true
-            fi
-          done
+
+          debugfs -R "dump /build.prop /tmp/vendor-build.prop" "$vendor"
+          vendor_vndk="$(sed -n 's/^ro.vndk.version=//p' /tmp/vendor-build.prop | tail -n1)"
+          test "$vendor_vndk" = "33" || {
+            echo "::error::Expected Android 13 vendor VNDK 33, found '$vendor_vndk'"
+            exit 1
+          }
+
+          debugfs -R "dump /system/build.prop /tmp/system-build.prop" "$system"
+          sdk="$(sed -n 's/^ro.build.version.sdk=//p' /tmp/system-build.prop | tail -n1)"
+          test "$sdk" = "33" || {
+            echo "::error::Expected Android 13 SDK 33, found '$sdk'"
+            exit 1
+          }
+
+          mountpoint=/mnt/andvm-system
+          sudo mkdir -p "$mountpoint"
+          sudo mount -o loop,rw "$system" "$mountpoint"
+          product="$mountpoint/system/product/etc/build.prop"
+          test -s "$product"
+          cp "$product" /tmp/product-build.prop.before
+          if grep -q '^ro.product.vndk.version=' "$product"; then
+            sudo sed -i 's/^ro.product.vndk.version=.*/ro.product.vndk.version=33/' "$product"
+          else
+            printf '\nro.product.vndk.version=33\n' | sudo tee -a "$product" >/dev/null
+          fi
+          sync
+          cp "$product" /tmp/product-build.prop.after
+          sudo umount "$mountpoint"
+          e2fsck -fn "$system"
+          grep -n '^ro.product.vndk.version=33$' /tmp/product-build.prop.after
+          echo "=== Product build.prop change ==="
+          diff -u /tmp/product-build.prop.before /tmp/product-build.prop.after || true
+          echo "=== Google app directories retained in the system image ==="
+          debugfs -R "ls -l /system/priv-app" "$system" 2>&1 | grep -Ei 'GmsCore|GoogleServicesFramework|Phonesky|GoogleLogin' || true
+          debugfs -R "ls -l /system/product/priv-app" "$system" 2>&1 | grep -Ei 'GmsCore|GoogleServicesFramework|Phonesky|GoogleLogin' || true
+          echo "=== Patched system image ==="
+          sha256sum "$system"
+          if [[ "$system" != "/tmp/system.img" ]]; then cp "$system" /tmp/system.img; fi
+
+      - name: Rebuild and verify the VROM container
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib, json, os, zipfile
+          source = "/tmp/waydroid-gapps-original.vrom"
+          system = "/tmp/system.img"
+          output = "/tmp/waydroid-lineage20-gapps-andvm.vrom"
+
+          def digest(path):
+              h = hashlib.sha256()
+              with open(path, "rb") as f:
+                  for block in iter(lambda: f.read(1 << 20), b""):
+                      h.update(block)
+              return h.hexdigest()
+
+          with zipfile.ZipFile(source, "r") as zin:
+              manifest = json.loads(zin.read("manifest.json"))
+              if "system.img" not in manifest.get("sha256", {}):
+                  raise SystemExit("Source manifest does not hash system.img")
+              manifest["sha256"]["system.img"] = digest(system)
+              with zipfile.ZipFile(output, "w", compression=zipfile.ZIP_DEFLATED,
+                                   compresslevel=1, allowZip64=True) as zout:
+                  for info in zin.infolist():
+                      if info.filename == "manifest.json":
+                          zout.writestr(info, json.dumps(manifest, indent=2) + "\n")
+                      elif info.filename == "system.img":
+                          zout.write(system, "system.img")
+                      else:
+                          with zin.open(info, "r") as src, zout.open(info, "w") as dst:
+                              while True:
+                                  block = src.read(1 << 20)
+                                  if not block:
+                                      break
+                                  dst.write(block)
+
+          with zipfile.ZipFile(output, "r") as z:
+              bad = z.testzip()
+              if bad:
+                  raise SystemExit(f"Corrupt ZIP member: {bad}")
+              manifest = json.loads(z.read("manifest.json"))
+              actual = hashlib.sha256(z.read("system.img")).hexdigest()
+              if actual != manifest["sha256"]["system.img"]:
+                  raise SystemExit("Patched system.img does not match the VROM manifest")
+              if "vendor.img" not in z.namelist():
+                  raise SystemExit("Google ROM lost vendor.img")
+          print(f"Output bytes: {os.path.getsize(output)}")
+          print(f"Output SHA-256: {digest(output)}")
+          print(f"system.img SHA-256: {digest(system)}")
+          PY
+          test "$(stat -c %s /tmp/waydroid-lineage20-gapps-andvm.vrom)" -lt 2000000000
+          unzip -t /tmp/waydroid-lineage20-gapps-andvm.vrom | tail -3
+          sha256sum /tmp/waydroid-lineage20-gapps-andvm.vrom
+          stat -c 'VROM_BYTES=%s' /tmp/waydroid-lineage20-gapps-andvm.vrom
+
+      - name: Publish the verified AndVM-compatible ROM
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if gh release view rom-GAPPS-andvm >/dev/null 2>&1; then
+            gh release upload rom-GAPPS-andvm /tmp/waydroid-lineage20-gapps-andvm.vrom --clobber
+          else
+            gh release create rom-GAPPS-andvm /tmp/waydroid-lineage20-gapps-andvm.vrom \
+              --target "$GITHUB_SHA" \
+              --title "Android 13 Google ROM · AndVM VNDK metadata" \
+              --notes "Original Waydroid LineageOS 20 GAPPS system and vendor images, with only the missing product VNDK property added (ro.product.vndk.version=33). The source system image and vendor VNDK version were verified as Android 13 / VNDK 33 before patching."
+          fi
+          gh release view rom-GAPPS-andvm --json assets --jq '.assets[] | select(.name == "waydroid-lineage20-gapps-andvm.vrom") | [.url, .size] | @tsv'
