@@ -138,7 +138,7 @@ fun DetailScreen(vm: AppViewModel, nav: NavHostController, id: String) {
                     Triple(NbIcons.preset(p.id), "Preset", p.name),
                     Triple(NbIcons.Memory, if (v.preset == "unlimited") "CPU · memory" else "CPU · memory cap",
                         if (v.preset == "unlimited") "No CPU cap · no RAM cap" else "${p.cores} cores · ${p.ramGb} GB"),
-                    Triple(NbIcons.AspectRatio, "Display", "${v.res} · ${p.fps} fps"),
+                    Triple(NbIcons.AspectRatio, "Display", if (v.preset == "unlimited") v.res else "${v.res} · ${p.fps} fps"),
                     Triple(NbIcons.Thermostat, "Thermal guard", "Throttle at 42°C"),
                 )
             ) { (icon, k, value) ->
