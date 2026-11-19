@@ -303,11 +303,14 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
      * Validate its manifest and image hashes first so Google apps and all image metadata
      * remain byte-for-byte intact for another NestBox import.
      */
-    fun hasCachedAndroid13Rom(): Boolean {
-        val rom = Catalog.rom("a13gapps")
-        val expected = (rom.source as? Catalog.Source.File)?.bytes ?: return false
-        val file = RomStore(app).fileFor(rom, "")
-        return file.isFile && file.length() == expected
+    private val _romCacheAvailable = MutableStateFlow<Boolean?>(null)
+    val romCacheAvailable: StateFlow<Boolean?> = _romCacheAvailable.asStateFlow()
+
+    /** Hash the large cached ROM off the UI thread before deciding whether to export it. */
+    fun checkAndroid13RomCache() {
+        viewModelScope.launch(Dispatchers.IO) {
+            _romCacheAvailable.value = RomStore(app).existingFile(Catalog.rom("a13gapps")) != null
+        }
     }
 
     fun exportAndroid13Rom(destination: Uri, selectedSource: Uri? = null) {
