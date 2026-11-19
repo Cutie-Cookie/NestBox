@@ -198,7 +198,9 @@ bool nb_select_legacy_egl(const std::string& R, std::string* error) {
         return true;
     }
     const std::string swiftshader = R + "/vendor/lib64/egl/libEGL_swiftshader.so";
-    if (!nb_arm64_elf(swiftshader)) {
+    struct stat swiftshader_stat{};
+    if (lstat(swiftshader.c_str(), &swiftshader_stat) != 0 ||
+        !S_ISREG(swiftshader_stat.st_mode) || !nb_arm64_elf(swiftshader)) {
         fprintf(stderr, "NestBox EGL: guest SDK %d but ARM64 SwiftShader is unavailable; keeping existing backend\n", sdk);
         return true;
     }
