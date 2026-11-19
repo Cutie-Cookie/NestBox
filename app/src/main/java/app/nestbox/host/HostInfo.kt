@@ -32,13 +32,6 @@ class HostInfo(private val context: Context) {
     /** Logical CPUs exposed by the phone's kernel. */
     val cpuCores: Int = Runtime.getRuntime().availableProcessors().coerceAtLeast(1)
 
-    /** Leave 10% of physical RAM for Android; the guest may use the rest. */
-    val guestRamGb: Int = run {
-        val mi = ActivityManager.MemoryInfo()
-        context.getSystemService(ActivityManager::class.java).getMemoryInfo(mi)
-        ((mi.totalMem * 0.90) / (1024.0 * 1024 * 1024)).roundToInt().coerceIn(1, ramGb)
-    }
-
     /** Highest refresh rate supported by the phone's built-in display. */
     val maxRefreshRate: Int = runCatching {
         context.getSystemService(DisplayManager::class.java)
@@ -70,6 +63,13 @@ class HostInfo(private val context: Context) {
         context.getSystemService(ActivityManager::class.java).getMemoryInfo(mi)
         val gib = mi.totalMem / (1024.0 * 1024 * 1024)
         listOf(2, 3, 4, 6, 8, 12, 16, 24, 32).firstOrNull { it >= gib } ?: gib.toInt()
+    }
+
+    /** Leave 10% of physical RAM for Android; the guest may use the rest. */
+    val guestRamGb: Int = run {
+        val mi = ActivityManager.MemoryInfo()
+        context.getSystemService(ActivityManager::class.java).getMemoryInfo(mi)
+        ((mi.totalMem * 0.90) / (1024.0 * 1024 * 1024)).roundToInt().coerceIn(1, ramGb)
     }
 
     /** Battery temperature, the closest phone temperature an app can read. */
