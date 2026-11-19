@@ -430,7 +430,7 @@ new_bpf = """    // Rootless hosts cannot reliably grant BPF kernel capabilities
         if (changed) {
             const std::string backup = l.instance + "/nestbox-original/bpfloader.rc";
             if (!nb_backup_once(bpf_rc, backup, error) || !write_mode(bpf_rc, safe_rc, 0644, error)) return false;
-            fprintf(stderr, "NestBox boot repair: injected bpf.progs_loaded release after bpfloader\n");
+            fprintf(stderr, "NestBox boot repair: injected bpf.progs_loaded release after bpfloader\\n");
         } else {
             fprintf(stderr, "NestBox boot repair: bpfloader.rc has no reboot_on_failure option; checked BPF wait release\\n");
         }
