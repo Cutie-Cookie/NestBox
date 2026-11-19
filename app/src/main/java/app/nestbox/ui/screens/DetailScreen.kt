@@ -74,7 +74,7 @@ fun DetailScreen(vm: AppViewModel, nav: NavHostController, id: String) {
     // Deleting removes the machine while this screen is still up.
     val v = vms.firstOrNull { it.id == id } ?: return
     val st = vm.status(v)
-    val p = Catalog.preset(v.preset)
+    val p = vm.host.preset(v.preset)
     var confirmDelete by remember { mutableStateOf(false) }
     var deleting by remember { mutableStateOf(false) }
 
