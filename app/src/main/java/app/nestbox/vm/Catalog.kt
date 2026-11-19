@@ -50,7 +50,7 @@ object Catalog {
         Preset("battery", "Battery", 2, 2, 30, "2 cores · 2 GB cap · 30 fps · pauses when hidden"),
         Preset("balanced", "Balanced", 4, 3, 60, "4 cores · 3 GB cap · 60 fps"),
         Preset("perf", "Performance", 6, 4, 90, "6 cores · 4 GB cap · 90 fps · runs warmer"),
-        Preset("unlimited", "Hardware max", 0, 0, 0, "Use the phone's available CPU, memory and display refresh rate"),
+        Preset("unlimited", "Hardware max", 0, 0, 0, "Use phone hardware automatically"),
     )
 
     val resolutions = listOf("720×1600", "1080×2400", "900×2000")
