@@ -158,7 +158,6 @@ class ModernEngine(
             val reply = link.request(
                 "start", vm.id, guestDir(vm.id).path,
                 "ram_mb=${p.ramGb * 1024}",
-                "cpu_cores=${p.cores}",
                 "data_size_mb=16384",
                 "width=$w", "height=$h", "dpi=$dpi",
                 "refresh=${p.fps}",
