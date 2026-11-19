@@ -25,6 +25,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import android.net.Uri
 import androidx.navigation.NavHostController
 import app.nestbox.BuildConfig
 import app.nestbox.settings.AppSettings
@@ -66,9 +67,16 @@ fun SettingsScreen(vm: AppViewModel, nav: NavHostController) {
     val s by vm.settings.collectAsStateWithLifecycle()
     val exportingRom by vm.romExporting.collectAsStateWithLifecycle()
     val romExportProgress by vm.romExportProgress.collectAsStateWithLifecycle()
+    var selectedRomSource by remember { mutableStateOf<Uri?>(null) }
     val exportRom = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/octet-stream"),
-    ) { uri -> if (uri != null) vm.exportAndroid13Rom(uri) }
+    ) { uri -> if (uri != null) vm.exportAndroid13Rom(uri, selectedRomSource) }
+    val chooseDownloadedRom = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) {
+            selectedRomSource = uri
+            exportRom.launch("Android13-Google.vrom")
+        }
+    }
     var dialog by remember { mutableStateOf<Item.Choice?>(null) }
 
     val sections = listOf(
@@ -115,9 +123,9 @@ fun SettingsScreen(vm: AppViewModel, nav: NavHostController) {
             Item.Link(
                 NbIcons.UploadFile, "Export Android 13 + Google",
                 if (exportingRom) "Saving .vrom · ${(romExportProgress * 100).toInt()}%"
-                else "Export verified NestBox .vrom · system image + Google apps (not a raw GSI)",
+                else if (vm.hasCachedAndroid13Rom()) "Export the verified downloaded .vrom · system image + Google apps" else "Select the .vrom you already downloaded, then choose where to save the export",
             ) {
-                if (!exportingRom) exportRom.launch("Android13-Google.vrom")
+                if (!exportingRom) { selectedRomSource = null; if (vm.hasCachedAndroid13Rom()) exportRom.launch("Android13-Google.vrom") else chooseDownloadedRom.launch(arrayOf("application/zip", "application/octet-stream", "*/*")) }
             },
         ),
 
