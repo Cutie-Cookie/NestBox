@@ -8,10 +8,10 @@
       "sdk": 33,
       "kind": "vrom",
       "system": {
-        "url": "https://github.com/yoro1836/wayondroid/releases/download/rom-GAPPS/waydroid-lineage20-gapps.vrom",
-        "bytes": 1157079790,
-        "sha256": "2c5fed8e18a9c8b5857c12bc4f0b564a7501df1ba02163c7cd052bbe6a48cc57",
-        "mirror": "a13gapps-system.vrom"
+        "url": "https://github.com/Cutie-Cookie/NestBox/releases/download/rom-GAPPS-andvm/waydroid-lineage20-gapps-andvm.vrom",
+        "bytes": 1243381194,
+        "sha256": "76753a972a578045158100a8350def4fef8f1ae7ce9df457d79ef21d6a52b19d",
+        "mirror": null
       }
     }
   ]
