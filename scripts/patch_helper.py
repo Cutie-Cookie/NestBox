@@ -222,6 +222,42 @@ bool nb_select_legacy_egl(const std::string& R, std::string* error) {
         text->append(value + "\n");
     }
     if (!write_mode(prop, *text, 0644, error)) return false;
+    // Imported Android 11 GSIs do not reliably consume Waydroid's private
+    // waydroid.prop. Put the selected backend in the actual product properties.
+    const std::string product_prop = R + "/system/product/etc/build.prop";
+    auto product_text = read_file(product_prop);
+    if (!product_text) return fail(error, "could not read product build.prop for Android 11 EGL selection");
+    const std::string egl_key = "ro.hardware.egl=";
+    size_t pos = 0;
+    bool product_replaced = false;
+    while ((pos = product_text->find(egl_key, pos)) != std::string::npos) {
+        const size_t end = product_text->find('\\n', pos);
+        product_text->replace(pos, end == std::string::npos ? product_text->size() - pos : end - pos,
+                              egl_key + "swiftshader");
+        pos += egl_key.size() + 10;
+        product_replaced = true;
+    }
+    if (!product_replaced) {
+        if (!product_text->empty() && product_text->back() != '\\n') product_text->push_back('\\n');
+        product_text->append(egl_key + "swiftshader\\n");
+    }
+    if (!write_mode(product_prop, *product_text, 0644, error)) return false;
+
+    // The generic Waydroid vendor EGL wrapper requires libgraphicsenv from a
+    // namespace where Android 11 does not expose it. Preserve those wrappers
+    // outside the EGL loader search path and use the platform's system wrapper.
+    const std::string egl_dir = R + "/vendor/lib64/egl";
+    for (const char* name : {"libEGL.so", "libGLESv1_CM.so", "libGLESv2.so"}) {
+        const std::string original = egl_dir + "/" + name;
+        struct stat st{};
+        if (lstat(original.c_str(), &st) != 0 || !S_ISREG(st.st_mode)) continue;
+        const std::string backup_dir = egl_dir + "/nestbox-incompatible";
+        const std::string backup = backup_dir + "/" + name;
+        if (!mkdirs_or_fail(backup_dir, error) || !copy_mode(original, backup, st.st_mode & 07777, error))
+            return false;
+        if (!remove_if_exists(original, error)) return false;
+        fprintf(stderr, "NestBox EGL: moved incompatible generic vendor wrapper %s aside\\n", name);
+    }
     fprintf(stderr, "NestBox EGL: guest SDK %d; selected ARM64 SwiftShader to avoid the incompatible ANGLE fallback\n", sdk);
     return true;
 }
