@@ -55,28 +55,50 @@ bool nb_backup_once(const std::string& src, const std::string& backup, std::stri
     return copy_file_sparse(src, backup) || fail(error, "backup original init config: " + src);
 }
 
-// Remove only the reboot_on_failure service option from bpfloader's stanza.
+// Keep bpfloader failure nonfatal and release Android 11 netd's BPF wait in rootless mode.
 std::string nb_make_bpfloader_nonfatal(const std::string& rc, bool* changed) {
     std::string out;
     bool in_service = false;
+    bool in_load_action = false;
+    bool action_sets_property = false;
     for (const auto& line : split_lines(rc)) {
-        const size_t first = line.find_first_not_of(" \t");
+        const size_t first = line.find_first_not_of(" \\t");
         const std::string trimmed = first == std::string::npos ? "" : line.substr(first);
         if (trimmed.rfind("service ", 0) == 0 || trimmed.rfind("on ", 0) == 0 ||
             trimmed.rfind("import ", 0) == 0) {
             in_service = trimmed.rfind("service bpfloader ", 0) == 0;
+            in_load_action = trimmed == "on load_bpf_programs";
+            action_sets_property = false;
         } else if (trimmed.empty()) {
             in_service = false;
+            in_load_action = false;
         }
+
         if (in_service && trimmed.rfind("reboot_on_failure ", 0) == 0) {
             *changed = true;
             continue;
         }
-        out += line + "\n";
+
+        out += line + "\\n";
+
+        // Android 11 netd waits forever for this property before it publishes
+        // the "netd" Binder service. In a rootless guest, bpfloader cannot load
+        // kernel programs and exits nonzero (Test13: status 2). Removing the
+        // reboot policy alone leaves netd permanently blocked. After exec_start
+        // has completed, explicitly release netd into its supported rootless
+        // startup path. If bpfloader succeeded, setting the same property is
+        // harmless and idempotent.
+        if (in_load_action && trimmed == "exec_start bpfloader" && !action_sets_property) {
+            out += "    setprop bpf.progs_loaded 1\\n";
+            action_sets_property = true;
+            *changed = true;
+        }
+        if (in_load_action && trimmed == "setprop bpf.progs_loaded 1") {
+            action_sets_property = true;
+        }
     }
     return out;
 }
-
 // ---- NestBox additions (see scripts/patch_helper.py) ----
 namespace {
 
@@ -399,8 +421,8 @@ old_bpf = """    if (!copy_mode(o.lib_dir + "/libvine_lmkd.so", R + "/system/bin
         !copy_mode(o.lib_dir + "/libvine_mediascan.so", R + "/system/bin/vine_mediascan", 0755, error))
         return false;"""
 new_bpf = """    // Rootless hosts cannot reliably grant BPF kernel capabilities. The Android
-    // 11 bpfloader.rc uses reboot_on_failure; that policy turns exit 2 into a
-    // fatal boot reboot. Keep service/trigger, remove only that fatal option.
+    // 11 netd waits for bpf.progs_loaded even after bpfloader fails. Keep the
+    // service/trigger, remove fatal reboot policy, and release netd after exec_start.
     const std::string bpf_rc = R + "/system/etc/init/bpfloader.rc";
     if (const auto rc = read_file(bpf_rc)) {
         bool changed = false;
@@ -409,7 +431,7 @@ new_bpf = """    // Rootless hosts cannot reliably grant BPF kernel capabilities
             const std::string backup = l.instance + "/nestbox-original/bpfloader.rc";
             if (!nb_backup_once(bpf_rc, backup, error) || !write_mode(bpf_rc, safe_rc, 0644, error)) return false;
         } else {
-            fprintf(stderr, "NestBox boot repair: bpfloader.rc has no reboot_on_failure option to remove\\n");
+            fprintf(stderr, "NestBox boot repair: bpfloader.rc has no reboot_on_failure option; checked BPF wait release\\n");
         }
     } else {
         fprintf(stderr, "NestBox boot repair: bpfloader.rc missing; policy unchanged\\n");
