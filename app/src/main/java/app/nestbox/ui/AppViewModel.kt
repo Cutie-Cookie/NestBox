@@ -9,6 +9,7 @@ import app.nestbox.adb.PairState
 import app.nestbox.adb.PairingService
 import app.nestbox.adb.ProcessLimit
 import app.nestbox.engine.MachineFiles
+import app.nestbox.engine.rom.RomStore
 import app.nestbox.engine.NoFreeSlotException
 import app.nestbox.service.Heartbeat
 import app.nestbox.service.VmService
@@ -45,6 +46,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.io.IOException
 import app.nestbox.bridge.SharedFolder
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -103,6 +105,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     private val _toast = MutableStateFlow<String?>(null)
     val toast: StateFlow<String?> = _toast.asStateFlow()
     private var toastJob: Job? = null
+
+    private val _romExporting = MutableStateFlow(false)
+    val romExporting: StateFlow<Boolean> = _romExporting.asStateFlow()
+    private val _romExportProgress = MutableStateFlow(0f)
+    val romExportProgress: StateFlow<Float> = _romExportProgress.asStateFlow()
 
     private val _hostTemp = MutableStateFlow(host.tempC())
     val hostTemp: StateFlow<Int> = _hostTemp.asStateFlow()
@@ -285,6 +292,55 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     // ---- Settings
     fun updateSettings(change: (AppSettings) -> AppSettings) = app.settings.update(change)
+
+    /**
+     * Exports the catalog's Android 13 + Google ROM as a .vrom file through the system document
+     * picker. The catalog source is the GApps build, so Play services and Play Store stay inside.
+     */
+    fun exportAndroid13Rom(destination: Uri) {
+        if (_romExporting.value) return
+        viewModelScope.launch {
+            _romExporting.value = true
+            _romExportProgress.value = 0f
+            val result = runCatching {
+                withContext(Dispatchers.IO) {
+                    val rom = Catalog.rom("a13gapps")
+                    val source = RomStore(app).existingFile(rom)
+                        ?: throw IOException("Android 13 + Google is not downloaded yet. Start an Android 13 + Google machine first.")
+                    val expected = (rom.source as? Catalog.Source.File)?.bytes ?: source.length()
+                    if (source.length() != expected) throw IOException("The downloaded ROM is incomplete.")
+                    val output = app.contentResolver.openOutputStream(destination, "w")
+                        ?: throw IOException("The selected save location could not be opened.")
+                    source.inputStream().buffered(1 shl 20).use { input ->
+                        output.buffered(1 shl 20).use { out ->
+                            val buffer = ByteArray(1 shl 20)
+                            var copied = 0L
+                            var lastUpdate = 0L
+                            while (true) {
+                                val count = input.read(buffer)
+                                if (count < 0) break
+                                out.write(buffer, 0, count)
+                                copied += count
+                                if (copied - lastUpdate >= 8_000_000L) {
+                                    lastUpdate = copied
+                                    _romExportProgress.value = (copied.toFloat() / expected).coerceIn(0f, 1f)
+                                }
+                            }
+                            out.flush()
+                            if (copied != expected) throw IOException("The ROM export was incomplete.")
+                        }
+                    }
+                }
+            }
+            _romExporting.value = false
+            result.onSuccess {
+                _romExportProgress.value = 1f
+                showToast("Android 13 + Google exported · .vrom")
+            }.onFailure {
+                showToast(it.message ?: "Could not export the Android 13 ROM")
+            }
+        }
+    }
 
     // ---- Machines
     fun start(id: String) {
