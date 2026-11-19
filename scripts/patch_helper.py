@@ -170,6 +170,60 @@ bool nb_stage_egl_drivers(const std::string& R, std::string* error) {
     return true;
 }
 
+// Android 11 does not provide the ANGLE backend selected by recent Waydroid builds.
+// If this imported guest is pre-Android 13, select the SwiftShader library already
+// shipped in the guest vendor image instead of falling back to vendor/lib64/egl/libEGL.so.
+bool nb_select_legacy_egl(const std::string& R, std::string* error) {
+    int sdk = 0;
+    const std::string build_props[] = {R + "/system/build.prop", R + "/system/system/build.prop"};
+    for (const auto& path : build_props) {
+        const auto text = read_file(path);
+        if (!text) continue;
+        const std::string key = "ro.build.version.sdk=";
+        const size_t at = text->find(key);
+        if (at == std::string::npos) continue;
+        size_t end = at + key.size();
+        while (end < text->size() && (*text)[end] >= '0' && (*text)[end] <= '9') {
+            sdk = sdk * 10 + ((*text)[end] - '0');
+            ++end;
+        }
+        if (sdk > 0) break;
+    }
+    if (sdk <= 0) {
+        fprintf(stderr, "NestBox EGL: guest SDK could not be read; keeping Waydroid backend\n");
+        return true;
+    }
+    if (sdk >= 33) {
+        fprintf(stderr, "NestBox EGL: guest SDK %d; keeping ANGLE backend\n", sdk);
+        return true;
+    }
+    const std::string swiftshader = R + "/vendor/lib64/egl/libEGL_swiftshader.so";
+    if (!nb_arm64_elf(swiftshader)) {
+        fprintf(stderr, "NestBox EGL: guest SDK %d but ARM64 SwiftShader is unavailable; keeping existing backend\n", sdk);
+        return true;
+    }
+    const std::string prop = R + "/vendor/waydroid.prop";
+    auto text = read_file(prop);
+    if (!text) return fail(error, "could not read vendor/waydroid.prop for legacy EGL selection");
+    const std::string key = "ro.hardware.egl=";
+    const std::string value = key + "swiftshader";
+    size_t at = 0;
+    bool replaced = false;
+    while ((at = text->find(key, at)) != std::string::npos) {
+        const size_t end = text->find('\n', at);
+        text->replace(at, end == std::string::npos ? text->size() - at : end - at, value);
+        at += value.size();
+        replaced = true;
+    }
+    if (!replaced) {
+        if (!text->empty() && text->back() != '\n') text->push_back('\n');
+        text->append(value + "\n");
+    }
+    if (!write_mode(prop, *text, 0644, error)) return false;
+    fprintf(stderr, "NestBox EGL: guest SDK %d; selected ARM64 SwiftShader to avoid the incompatible ANGLE fallback\n", sdk);
+    return true;
+}
+
 // nestbox.remove deleted, nestbox.prop into a marked block of /system/product/etc/build.prop,
 // nestbox.files copied, the shared folder mount
 bool nb_apply_overlay(const Layout& l, std::string* error) {
@@ -295,7 +349,7 @@ if new_bpf not in s:
 # Put system-side ARM64 EGL implementations in Android's preferred vendor EGL
 # directory. Preserve any ROM/vendor implementation already installed there.
 egl_anchor = 'if (!write_mode(R + "/vendor/waydroid.prop", waydroid_prop(o.dpi, o.gpu), 0644, error)) return false;'
-egl_patch = egl_anchor + '\n    if (!nb_stage_egl_drivers(R, error)) return false;'
+egl_patch = egl_anchor + '\n    if (!nb_stage_egl_drivers(R, error)) return false;\n    if (!nb_select_legacy_egl(R, error)) return false;'
 if egl_patch not in s:
     if egl_anchor not in s:
         raise SystemExit("vendor waydroid.prop write not found; refusing EGL staging patch")
