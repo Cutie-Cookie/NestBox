@@ -231,15 +231,15 @@ bool nb_select_legacy_egl(const std::string& R, std::string* error) {
     size_t pos = 0;
     bool product_replaced = false;
     while ((pos = product_text->find(egl_key, pos)) != std::string::npos) {
-        const size_t end = product_text->find('\\n', pos);
+        const size_t end = product_text->find('\n', pos);
         product_text->replace(pos, end == std::string::npos ? product_text->size() - pos : end - pos,
                               egl_key + "swiftshader");
         pos += egl_key.size() + 10;
         product_replaced = true;
     }
     if (!product_replaced) {
-        if (!product_text->empty() && product_text->back() != '\\n') product_text->push_back('\\n');
-        product_text->append(egl_key + "swiftshader\\n");
+        if (!product_text->empty() && product_text->back() != '\n') product_text->push_back('\n');
+        product_text->append(egl_key + "swiftshader\n");
     }
     if (!write_mode(product_prop, *product_text, 0644, error)) return false;
 
@@ -256,7 +256,7 @@ bool nb_select_legacy_egl(const std::string& R, std::string* error) {
         if (!mkdirs_or_fail(backup_dir, error) || !copy_mode(original, backup, st.st_mode & 07777, error))
             return false;
         if (!remove_if_exists(original, error)) return false;
-        fprintf(stderr, "NestBox EGL: moved incompatible generic vendor wrapper %s aside\\n", name);
+        fprintf(stderr, "NestBox EGL: moved incompatible generic vendor wrapper %s aside\n", name);
     }
     fprintf(stderr, "NestBox EGL: guest SDK %d; selected ARM64 SwiftShader to avoid the incompatible ANGLE fallback\n", sdk);
     return true;
