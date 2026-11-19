@@ -303,22 +303,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
      * Validate its manifest and image hashes first so Google apps and all image metadata
      * remain byte-for-byte intact for another NestBox import.
      */
-    private val _romCacheAvailable = MutableStateFlow<Boolean?>(null)
-    val romCacheAvailable: StateFlow<Boolean?> = _romCacheAvailable.asStateFlow()
-
-    /** Hash the large cached ROM off the UI thread before deciding whether to export it. */
-    fun checkAndroid13RomCache() {
-        viewModelScope.launch(Dispatchers.IO) {
-            _romCacheAvailable.value = RomStore(app).existingFile(Catalog.rom("a13gapps")) != null
-        }
-    }
-
-    fun exportAndroid13Rom(destination: Uri, selectedSource: Uri? = null) {
+    fun exportAndroid13Rom(destination: Uri) {
         if (_romExporting.value) return
         viewModelScope.launch {
             _romExporting.value = true
             _romExportProgress.value = 0f
-            val importedSource = File(app.cacheDir, "android13-google-export-source.vrom")
             val result = runCatching {
                 withContext(Dispatchers.IO) {
                     val rom = Catalog.rom("a13gapps")
@@ -326,27 +315,15 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     val store = RomStore(app)
                     val sourceInfo = rom.source as? Catalog.Source.File
                         ?: throw IOException("The Android 13 ROM source metadata is unavailable.")
-                    val source = store.existingFile(rom) ?: run {
-                        val uri = selectedSource
-                            ?: throw IOException("Choose the Android 13 + Google .vrom you already downloaded.")
-                        app.contentResolver.openInputStream(uri)?.use { input ->
-                            importedSource.outputStream().use { output ->
-                                val buffer = ByteArray(1 shl 20)
-                                var copied = 0L
-                                while (true) {
-                                    val n = input.read(buffer)
-                                    if (n < 0) break
-                                    output.write(buffer, 0, n)
-                                    copied += n
-                                    _romExportProgress.value = (copied.toFloat() / sourceInfo.bytes).coerceIn(0f, 0.35f)
-                                }
-                            }
-                        } ?: throw IOException("The selected .vrom file could not be opened.")
-                        importedSource
+                    // The first Android 13 + Google machine downloads this shared catalog ROM
+                    // to filesDir/roms/a13gapps.vrom. Reuse that exact cache. ensure() only
+                    // downloads automatically if it is genuinely missing; no file picker is needed.
+                    val source = store.ensure(rom, "", null) { progress, _ ->
+                        _romExportProgress.value = progress
                     }
-                    if (source.length() != sourceInfo.bytes) throw IOException("The selected ROM is incomplete or is not the patched Android 13 + Google download.")
+                    if (source.length() != sourceInfo.bytes) throw IOException("The built-in Android 13 + Google ROM is incomplete.")
                     val sourceSha = RomStore.sha256(source)
-                    if (!sourceSha.equals(sourceInfo.sha256, true)) throw IOException("The selected ROM checksum does not match the patched Google-enabled catalog image.")
+                    if (!sourceSha.equals(sourceInfo.sha256, true)) throw IOException("The built-in Android 13 + Google ROM checksum does not match the catalog.")
 
                     // This is NestBox's VROM container: manifest.json + system.img,
                     // and optional vendor.img. A raw GSI or renamed ZIP is not equivalent.
@@ -414,7 +391,6 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     if (!savedSha.equals(sourceInfo.sha256, true)) throw IOException("The saved .vrom did not pass its read-back checksum.")
                 }
             }
-            importedSource.delete()
             _romExporting.value = false
             result.onSuccess {
                 _romExportProgress.value = 1f
