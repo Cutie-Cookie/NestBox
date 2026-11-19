@@ -277,8 +277,8 @@ bool nb_disable_guest_iptables_restore(const std::string& R, const std::string& 
         "# NestBox rootless guest: packet filtering is provided by the host socket bridge.\n"
         "# Emulate iptables-restore's persistent #PING acknowledgement protocol.\n"
         "while IFS= read -r line; do\n"
-        "    if [ \\"$line\\" = \\"#PING\\" ]; then\n"
-        "        printf '%s\\\n' '#PING'\n"
+        "    if [ \"$line\" = \"#PING\" ]; then\n"
+        "        echo '#PING'\n"
         "    fi\n"
         "done\n"
         "exit 0\n";
