@@ -56,47 +56,59 @@ bool nb_backup_once(const std::string& src, const std::string& backup, std::stri
 }
 
 // Keep bpfloader failure nonfatal and release Android 11 netd's BPF wait in rootless mode.
+// Remove a fatal reboot policy from bpfloader, but do not pretend this alone releases netd.
 std::string nb_make_bpfloader_nonfatal(const std::string& rc, bool* changed) {
     std::string out;
     bool in_service = false;
-    bool in_load_action = false;
-    bool action_sets_property = false;
     for (const auto& line : split_lines(rc)) {
-        const size_t first = line.find_first_not_of(" \t");
+        const size_t first = line.find_first_not_of(" \\t");
         const std::string trimmed = first == std::string::npos ? "" : line.substr(first);
         if (trimmed.rfind("service ", 0) == 0 || trimmed.rfind("on ", 0) == 0 ||
             trimmed.rfind("import ", 0) == 0) {
             in_service = trimmed.rfind("service bpfloader ", 0) == 0;
-            in_load_action = trimmed == "on load_bpf_programs";
-            action_sets_property = false;
         } else if (trimmed.empty()) {
             in_service = false;
-            in_load_action = false;
         }
-
         if (in_service && trimmed.rfind("reboot_on_failure ", 0) == 0) {
             *changed = true;
             continue;
         }
+        out += line + "\\n";
+    }
+    return out;
+}
 
-        out += line + "\n";
-
-        // Android 11 netd waits forever for this property before it publishes
-        // the "netd" Binder service. In a rootless guest, bpfloader cannot load
-        // kernel programs and exits nonzero (Test13: status 2). Removing the
-        // reboot policy alone leaves netd permanently blocked. After exec_start
-        // has completed, explicitly release netd into its supported rootless
-        // startup path. If bpfloader succeeded, setting the same property is
-        // harmless and idempotent.
-        if (in_load_action && trimmed == "exec_start bpfloader" && !action_sets_property) {
-            out += "    setprop bpf.progs_loaded 1\n";
-            action_sets_property = true;
-            *changed = true;
+// Android 11's load-bpf-programs action lives in the main init.rc, not bpfloader.rc.
+// exec_start waits for bpfloader to exit; release netd immediately afterwards even
+// when the rootless kernel cannot load BPF objects and bpfloader exits with status 2.
+std::string nb_release_bpf_wait(const std::string& rc, bool* changed) {
+    std::string out;
+    bool in_load_action = false;
+    bool found_action = false;
+    bool already_released = false;
+    for (const auto& line : split_lines(rc)) {
+        const size_t first = line.find_first_not_of(" \\t");
+        const std::string trimmed = first == std::string::npos ? "" : line.substr(first);
+        if (trimmed.rfind("on ", 0) == 0 || trimmed.rfind("service ", 0) == 0 ||
+            trimmed.rfind("import ", 0) == 0) {
+            in_load_action = trimmed == "on load-bpf-programs" || trimmed == "on load_bpf_programs";
+            if (in_load_action) found_action = true;
+        } else if (trimmed.empty()) {
+            in_load_action = false;
         }
-        if (in_load_action && trimmed == "setprop bpf.progs_loaded 1") {
-            action_sets_property = true;
+        out += line + "\\n";
+        if (in_load_action && trimmed == "exec_start bpfloader") {
+            // Keep this after exec_start: init waits for the loader to finish first.
+            if (!already_released) {
+                out += "    setprop bpf.progs_loaded 1\\n";
+                already_released = true;
+                *changed = true;
+            }
+        } else if (in_load_action && trimmed == "setprop bpf.progs_loaded 1") {
+            already_released = true;
         }
     }
+    if (!found_action) return rc;
     return out;
 }
 // ---- NestBox additions (see scripts/patch_helper.py) ----
@@ -420,9 +432,8 @@ if new_zygote not in s:
 old_bpf = """    if (!copy_mode(o.lib_dir + "/libvine_lmkd.so", R + "/system/bin/vine_lmkd", 0755, error) ||
         !copy_mode(o.lib_dir + "/libvine_mediascan.so", R + "/system/bin/vine_mediascan", 0755, error))
         return false;"""
-new_bpf = """    // Rootless hosts cannot reliably grant BPF kernel capabilities. The Android
-    // 11 netd waits for bpf.progs_loaded even after bpfloader fails. Keep the
-    // service/trigger, remove fatal reboot policy, and release netd after exec_start.
+new_bpf = """    // Keep bpfloader's original service and its diagnostics, but do not let a failed
+    // BPF load reboot the whole guest. Preserve the original service configuration.
     const std::string bpf_rc = R + "/system/etc/init/bpfloader.rc";
     if (const auto rc = read_file(bpf_rc)) {
         bool changed = false;
@@ -430,12 +441,36 @@ new_bpf = """    // Rootless hosts cannot reliably grant BPF kernel capabilities
         if (changed) {
             const std::string backup = l.instance + "/nestbox-original/bpfloader.rc";
             if (!nb_backup_once(bpf_rc, backup, error) || !write_mode(bpf_rc, safe_rc, 0644, error)) return false;
-            fprintf(stderr, "NestBox boot repair: injected bpf.progs_loaded release after bpfloader\\n");
-        } else {
-            fprintf(stderr, "NestBox boot repair: bpfloader.rc has no reboot_on_failure option; checked BPF wait release\\n");
+            fprintf(stderr, "NestBox boot repair: removed fatal bpfloader reboot policy\\n");
         }
-    } else {
-        fprintf(stderr, "NestBox boot repair: bpfloader.rc missing; policy unchanged\\n");
+    }
+
+    // Android 11 puts "on load-bpf-programs" in init.rc (hyphenated), not in
+    // bpfloader.rc. The prior patch searched the wrong file and never released netd.
+    const std::string init_paths[] = {
+        R + "/system/etc/init/hw/init.rc",
+        R + "/system/etc/init.rc"
+    };
+    bool bpf_wait_released = false;
+    for (const auto& init_path : init_paths) {
+        const auto init_text = read_file(init_path);
+        if (!init_text) continue;
+        bool changed = false;
+        const std::string patched = nb_release_bpf_wait(*init_text, &changed);
+        if (changed) {
+            const std::string backup = l.instance + "/nestbox-original/init.rc";
+            if (!nb_backup_once(init_path, backup, error) || !write_mode(init_path, patched, 0644, error)) return false;
+            fprintf(stderr, "NestBox boot repair: released bpf.progs_loaded after Android init exec_start\\n");
+            bpf_wait_released = true;
+            break;
+        }
+        if (patched != *init_text) {
+            bpf_wait_released = true;
+            break;
+        }
+    }
+    if (!bpf_wait_released) {
+        fprintf(stderr, "NestBox boot repair: Android init BPF trigger not found; netd wait remains unresolved\\n");
     }
     if (!copy_mode(o.lib_dir + "/libvine_lmkd.so", R + "/system/bin/vine_lmkd", 0755, error) ||
         !copy_mode(o.lib_dir + "/libvine_mediascan.so", R + "/system/bin/vine_mediascan", 0755, error))
