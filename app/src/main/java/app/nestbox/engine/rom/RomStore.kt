@@ -46,14 +46,24 @@ class RomStore(private val context: Context) {
     suspend fun ensure(rom: Catalog.Rom, vmId: String, importUri: String?, progress: (Float, String) -> Unit): File =
         withContext(Dispatchers.IO) {
             val out = fileFor(rom, vmId)
-            if (out.isFile && out.length() > 0) return@withContext out
             when (val src = rom.source) {
                 is Catalog.Source.File -> {
-                    // Copied to the phone by USB: read it where it is instead of downloading
+                    // Catalog URLs can change while an older ROM is cached. Never boot or export
+                    // a stale image just because a file with the same ROM id already exists.
+                    if (out.isFile) {
+                        val valid = out.length() == src.bytes &&
+                            runCatching { sha256(out) }.getOrNull().equals(src.sha256, true)
+                        if (valid) return@withContext out
+                        out.delete()
+                    }
+                    // Copied to the phone by USB: read it where it is instead of downloading.
                     findLocal(src.bytes, src.sha256, progress)?.let { return@withContext it }
                     download(src, out, progress)
                 }
-                Catalog.Source.Import -> copyImport(importUri ?: throw IOException("No ROM file was chosen"), out, progress)
+                Catalog.Source.Import -> {
+                    if (out.isFile && out.length() > 0) return@withContext out
+                    copyImport(importUri ?: throw IOException("No ROM file was chosen"), out, progress)
+                }
             }
             out
         }
@@ -83,6 +93,11 @@ class RomStore(private val context: Context) {
 
     private suspend fun download(src: Catalog.Source.File, out: File, progress: (Float, String) -> Unit) {
         val part = File(out.path + ".part")
+        val meta = File(part.path + ".sha256")
+        val previousSha = runCatching { meta.readText().trim() }.getOrNull()
+        // A partial download is resumable only for the exact catalog image it started from.
+        if (part.exists() && !previousSha.equals(src.sha256, ignoreCase = true)) part.delete()
+        if (!previousSha.equals(src.sha256, ignoreCase = true)) meta.writeText(src.sha256)
         val conn = open(src.url, part.length())
         val resumed = conn.responseCode == HttpURLConnection.HTTP_PARTIAL
         if (!resumed) part.delete()
@@ -96,9 +111,11 @@ class RomStore(private val context: Context) {
         val sha = sha256(part)
         if (!sha.equals(src.sha256, ignoreCase = true)) {
             part.delete()
+            meta.delete()
             throw IOException("The download is damaged (checksum mismatch). Start the machine again to retry.")
         }
         if (!part.renameTo(out)) throw IOException("Could not save the system file")
+        meta.delete()
     }
 
     private suspend fun copyImport(uri: String, out: File, progress: (Float, String) -> Unit) {
