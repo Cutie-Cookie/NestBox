@@ -262,6 +262,38 @@ bool nb_select_legacy_egl(const std::string& R, std::string* error) {
     return true;
 }
 
+// Android's netd initializes firewall chains with iptables-restore before it publishes
+// the "netd" Binder service. In rootless mode the guest has no private netfilter
+// kernel API: NETLINK_NETFILTER is represented by a userspace stub. Stock
+// iptables-restore can wait forever for kernel ACKs, stranding netd before Binder
+// registration and triggering system_server's NetworkManagementService watchdog.
+// The guest's sockets are routed by fake-net, not guest iptables, so make only the
+// restore front-ends successful no-ops. Preserve the ROM binaries per instance.
+bool nb_disable_guest_iptables_restore(const std::string& R, const std::string& instance,
+                                        std::string* error) {
+    const char* names[] = {"iptables-restore", "ip6tables-restore"};
+    const std::string script =
+        "#!/system/bin/sh\n"
+        "# NestBox rootless guest: packet filtering is provided by the host socket bridge.\n"
+        "# Do not wait for unavailable guest NETLINK_NETFILTER acknowledgements.\n"
+        "exit 0\n";
+    for (const char* name : names) {
+        const std::string path = R + "/system/bin/" + name;
+        struct stat st{};
+        if (lstat(path.c_str(), &st) != 0) continue;
+        if (!S_ISREG(st.st_mode) && !S_ISLNK(st.st_mode)) {
+            fprintf(stderr, "NestBox netfilter: leaving non-file %s unchanged\\n", path.c_str());
+            continue;
+        }
+        const std::string backup = instance + "/nestbox-original/" + name;
+        if (!nb_backup_once(path, backup, error)) return false;
+        if (!remove_if_exists(path, error) || !write_mode(path, script, 0755, error)) return false;
+        fprintf(stderr, "NestBox netfilter: preserved original %s and installed rootless-safe restore shim\\n",
+                name);
+    }
+    return true;
+}
+
 // nestbox.remove deleted, nestbox.prop into a marked block of /system/product/etc/build.prop,
 // nestbox.files copied, the shared folder mount
 bool nb_apply_overlay(const Layout& l, std::string* error) {
@@ -302,6 +334,7 @@ bool nb_apply_overlay(const Layout& l, std::string* error) {
         fprintf(stderr, "NestBox: verified rootless graphics properties in %s\n", prop.c_str());
     }
     if (!nb_copy_tree(l.instance + "/nestbox.files", R, error)) return false;
+    if (!nb_disable_guest_iptables_restore(R, l.instance, error)) return false;
     const std::string init_dir = R + "/system/product/etc/init";
     // left by NestBox 0.6-0.7 (Android 10 port)
     if (!remove_if_exists(init_dir + "/nestbox-storage-q.rc", error)) return false;
