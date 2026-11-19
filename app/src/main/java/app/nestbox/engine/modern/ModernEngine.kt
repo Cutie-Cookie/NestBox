@@ -141,7 +141,7 @@ class ModernEngine(
             helper = link
             scope.launch { link.events.collect(::onEvent) }
             link.connect()
-            val p = Catalog.preset(vm.preset)
+            val p = host.preset(vm.preset)
             val (w, h) = vm.res.split('×', 'x').map { it.trim().toInt() }.let { it[0] to it[1] }
             val dm = context.resources.displayMetrics
             val dpi = (dm.densityDpi * w / dm.widthPixels.coerceAtLeast(1)).coerceIn(160, 640)
@@ -410,7 +410,7 @@ class ModernEngine(
         if (display == 0L) {
             display = VineRuntime.openDisplay(fb.path)
             if (display == 0L) return
-            VineRuntime.setDisplayFrameRate(display, Catalog.preset(v.preset).fps)
+            VineRuntime.setDisplayFrameRate(display, host.preset(v.preset).fps)
         }
         VineRuntime.attachSurface(display, s)
         VineRuntime.startRendering(display)
