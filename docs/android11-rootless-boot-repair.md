@@ -146,3 +146,17 @@ The rootless prep patch now reads `ro.build.version.sdk` from the extracted gues
 ## Android 13 + Google ROM export
 
 Settings now has an **Export Android 13 + Google** action. It exports the catalog's checksum-verified `a13gapps` VROM through Android's document picker as `Android13-Google.vrom`. That catalog source is the LineageOS 20 / Android 13 GApps build, so Google Play services and Play Store are already inside the exported VROM; this is not a bare system image or a separate GApps download. Export is available after the ROM has been downloaded or found in NestBox's supported local ROM folders.
+
+
+## Step 14 — X11-test13: exact root cause of the remaining Android 11 boot hang
+
+- Test13 was finally available and inspected in full. It is an Android 11 / LineageOS 18.1 guest (API 30) on the itel A666L host. The machine reports a13imp only as its catalog identifier; the guest fingerprint and logcat explicitly identify Android 11.
+- The prior diagnosis was incomplete: the iptables-restore shim was not the first blocker. The kmsg proves:
+  - Mounting /sys/fs/bpf fails with Operation not permitted.
+  - bpfloader starts and exits with status 2.
+  - No bpf.progs_loaded=1 property is set.
+  - netd starts, but Android SystemServer waits indefinitely for the netd Binder service; the Watchdog stack ends at NetdService.get() -> NetworkManagementService.connectNativeNetdService().
+- AOSP Android 10/11 netd source confirms it waits for bpf.progs_loaded=1 before initializing and publishing netd. AOSP bpfloader init configuration documents that bpfloader failure can cause a netd/system_server crashloop. Thus the precise blocker is the missing BPF-completion property after rootless BPF loading fails, not the firewall restore controller. The iptables restore shim is retained as a later rootless compatibility measure, not claimed as the cause of Test13.
+- Corrected rootless-only init patch: preserve the original bpfloader.rc backup and service/trigger; after the synchronous exec_start bpfloader command returns, issue setprop bpf.progs_loaded 1. This releases netd's documented wait even when BPF loading is unsupported in the rootless guest. It does not claim that kernel BPF features are available; guest network behavior continues to rely on NestBox's host socket bridge. If bpfloader succeeds normally, setting the already-set property is idempotent.
+- The next test must prove the sequence: prepare.log confirms the BPF-wait release was injected; kmsg may still show bpfloader status 2, but must show the property action completed; logcat must show netd registered and NetworkManagementService moved past its constructor; then SurfaceFlinger and boot animation must settle without zygote restart. Any subsequent blocker will be treated separately.
+- References: AOSP Android 11 netd service registration and BPF startup source, AOSP bpfloader.rc action, and NetdNativeService::start() service publication.
