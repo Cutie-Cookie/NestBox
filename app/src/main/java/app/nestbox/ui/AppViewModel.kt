@@ -318,6 +318,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             _romExporting.value = true
             _romExportProgress.value = 0f
+            val importedSource = File(app.cacheDir, "android13-google-export-source.vrom")
             val result = runCatching {
                 withContext(Dispatchers.IO) {
                     val rom = Catalog.rom("a13gapps")
@@ -328,9 +329,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     val source = store.existingFile(rom) ?: run {
                         val uri = selectedSource
                             ?: throw IOException("Choose the Android 13 + Google .vrom you already downloaded.")
-                        val imported = File(app.cacheDir, "android13-google-export-source.vrom")
                         app.contentResolver.openInputStream(uri)?.use { input ->
-                            imported.outputStream().use { output ->
+                            importedSource.outputStream().use { output ->
                                 val buffer = ByteArray(1 shl 20)
                                 var copied = 0L
                                 while (true) {
@@ -342,7 +342,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                                 }
                             }
                         } ?: throw IOException("The selected .vrom file could not be opened.")
-                        imported
+                        importedSource
                     }
                     if (source.length() != sourceInfo.bytes) throw IOException("The selected ROM is incomplete or is not the patched Android 13 + Google download.")
                     val sourceSha = RomStore.sha256(source)
@@ -414,6 +414,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     if (!savedSha.equals(sourceInfo.sha256, true)) throw IOException("The saved .vrom did not pass its read-back checksum.")
                 }
             }
+            importedSource.delete()
             _romExporting.value = false
             result.onSuccess {
                 _romExportProgress.value = 1f
