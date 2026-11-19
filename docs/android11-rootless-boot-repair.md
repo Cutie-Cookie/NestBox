@@ -135,3 +135,14 @@ No runtime fix is considered successful until a device test log confirms the gue
 - The next build is a diagnostic/fix candidate, not yet a confirmed boot fix. Its rootfs-preparation log must show which drivers were staged and the resulting vendor EGL inventory. Test10 must then confirm that `libEGL` loads the selected driver and SurfaceFlinger remains alive.
 
 - Corrected Build 65 (run `44424080735`) succeeded after the generated-newline fix. The full Build61 restore/merge/sign workflow passed: 286 entries compared locally, zero missing/added, the original `classes14.dex` backup and runtime copy are byte-identical, APK v3 signature and permanent release certificate verified, and all 16 required ARM64 native libraries are present. APK SHA-256: `c40d5c7cec18c8eda283e6f3896a2ab020e82ca6cdc584131aced818f0250728`. Device boot remains unverified pending Test10.
+
+
+## Test10: imported Android 11 EGL backend selection
+
+Test10 completed rootfs preparation and reached Android init. Its tombstone identifies the imported guest as LineageOS 18.1 / Android 11 (API 30), despite the machine's generic import catalog entry. SurfaceFlinger was still aborting because the generic vendor EGL driver at `/vendor/lib64/egl/libEGL.so` requires `libgraphicsenv.so`, which is not visible in the guest's vendor linker namespace. The guest already contained ARM64 Mesa and SwiftShader EGL libraries, so copying more drivers was not the missing step.
+
+The rootless prep patch now reads `ro.build.version.sdk` from the extracted guest's system build properties. For pre-Android 13 guests, when a regular ARM64 `libEGL_swiftshader.so` is present in the guest vendor EGL directory, it changes only `ro.hardware.egl` in `/vendor/waydroid.prop` to `swiftshader`. Android 13 keeps the existing ANGLE selection. The SwiftShader file lookup uses `lstat` and refuses symlinks to avoid host-side traversal through absolute guest symlinks. The next device test must confirm that the prepare log reports the detected SDK and SwiftShader selection, and that SurfaceFlinger gets past EGL initialization.
+
+## Android 13 + Google ROM export
+
+Settings now has an **Export Android 13 + Google** action. It exports the catalog's checksum-verified `a13gapps` VROM through Android's document picker as `Android13-Google.vrom`. That catalog source is the LineageOS 20 / Android 13 GApps build, so Google Play services and Play Store are already inside the exported VROM; this is not a bare system image or a separate GApps download. Export is available after the ROM has been downloaded or found in NestBox's supported local ROM folders.
