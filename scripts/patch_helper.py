@@ -273,10 +273,15 @@ bool nb_disable_guest_iptables_restore(const std::string& R, const std::string& 
                                         std::string* error) {
     const char* names[] = {"iptables-restore", "ip6tables-restore"};
     const std::string script =
-        "#!/system/bin/sh\n"
-        "# NestBox rootless guest: packet filtering is provided by the host socket bridge.\n"
-        "# Do not wait for unavailable guest NETLINK_NETFILTER acknowledgements.\n"
-        "exit 0\n";
+        "#!/system/bin/sh\\n"
+        "# NestBox rootless guest: packet filtering is provided by the host socket bridge.\\n"
+        "# Emulate iptables-restore's persistent #PING acknowledgement protocol.\\n"
+        "while IFS= read -r line; do\\n"
+        "    if [ \\"$line\\" = \\"#PING\\" ]; then\\n"
+        "        printf '%s\\\\n' '#PING'\\n"
+        "    fi\\n"
+        "done\\n"
+        "exit 0\\n";
     for (const char* name : names) {
         const std::string path = R + "/system/bin/" + name;
         struct stat st{};
