@@ -142,7 +142,7 @@ object NbIcons {
 
     fun preset(id: String) = when (id) {
         "battery" -> Battery
-        "perf" -> Speed
+        "perf", "unlimited" -> Speed
         else -> Balance
     }
 }
