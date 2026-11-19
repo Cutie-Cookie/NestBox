@@ -73,7 +73,7 @@ std::string nb_make_bpfloader_nonfatal(const std::string& rc, bool* changed) {
             *changed = true;
             continue;
         }
-        out += line + "\\n";
+        out += line + "\n";
     }
     return out;
 }
@@ -96,11 +96,11 @@ std::string nb_release_bpf_wait(const std::string& rc, bool* changed) {
         } else if (trimmed.empty()) {
             in_load_action = false;
         }
-        out += line + "\\n";
+        out += line + "\n";
         if (in_load_action && trimmed == "exec_start bpfloader") {
             // Keep this after exec_start: init waits for the loader to finish first.
             if (!already_released) {
-                out += "    setprop bpf.progs_loaded 1\\n";
+                out += "    setprop bpf.progs_loaded 1\n";
                 already_released = true;
                 *changed = true;
             }
