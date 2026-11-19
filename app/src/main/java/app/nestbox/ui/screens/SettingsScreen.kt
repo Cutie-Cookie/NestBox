@@ -86,7 +86,11 @@ fun SettingsScreen(vm: AppViewModel, nav: NavHostController) {
         "Machine defaults" to listOf(
             Item.Choice(
                 NbIcons.Balance, "Default preset",
-                Catalog.presets.map { Option(it.id, it.name, it.sub) }, { it.defaultPreset }, { a, k -> a.copy(defaultPreset = k) },
+                Catalog.presets.map { p ->
+                    Option(p.id, p.name, if (p.id == "unlimited")
+                        "${vm.host.cpuCores} logical cores available · no RAM cap · up to ${vm.host.maxRefreshRate} Hz"
+                    else p.sub)
+                }, { it.defaultPreset }, { a, k -> a.copy(defaultPreset = k) },
             ),
             Item.Switch(NbIcons.Screen, "Keep screen on", "Stop the phone from sleeping while a machine is on screen", { it.keepScreenOn }) { it.copy(keepScreenOn = !it.keepScreenOn) },
         ),
