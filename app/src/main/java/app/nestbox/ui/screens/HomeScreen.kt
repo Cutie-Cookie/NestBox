@@ -76,12 +76,12 @@ fun agoText(ms: Long?): String {
     }
 }
 
-fun chipsFor(v: VmConfig) = listOfNotNull(
+fun chipsFor(v: VmConfig, host: app.nestbox.host.HostInfo) = listOfNotNull(
     "ROOT".takeIf { v.root },
     "LSPOSED".takeIf { v.xposed },
     "GMS".takeIf { v.gms },
     v.spoof.region.takeIf { it != "Off" },
-    Catalog.preset(v.preset).name.uppercase(),
+    host.preset(v.preset).name.uppercase(),
 )
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -190,7 +190,7 @@ fun HomeScreen(vm: AppViewModel, nav: NavHostController) {
                                 Text(Catalog.rom(v.romId).short, style = mono(Nb.T11))
                             }
                             FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                chipsFor(v).forEach { Tag(it) }
+                                chipsFor(v, vm.host).forEach { Tag(it) }
                             }
                         }
                         Box(
