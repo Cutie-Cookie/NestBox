@@ -62,7 +62,7 @@ std::string nb_make_bpfloader_nonfatal(const std::string& rc, bool* changed) {
     bool in_load_action = false;
     bool action_sets_property = false;
     for (const auto& line : split_lines(rc)) {
-        const size_t first = line.find_first_not_of(" \\t");
+        const size_t first = line.find_first_not_of(" \t");
         const std::string trimmed = first == std::string::npos ? "" : line.substr(first);
         if (trimmed.rfind("service ", 0) == 0 || trimmed.rfind("on ", 0) == 0 ||
             trimmed.rfind("import ", 0) == 0) {
@@ -79,7 +79,7 @@ std::string nb_make_bpfloader_nonfatal(const std::string& rc, bool* changed) {
             continue;
         }
 
-        out += line + "\\n";
+        out += line + "\n";
 
         // Android 11 netd waits forever for this property before it publishes
         // the "netd" Binder service. In a rootless guest, bpfloader cannot load
@@ -89,7 +89,7 @@ std::string nb_make_bpfloader_nonfatal(const std::string& rc, bool* changed) {
         // startup path. If bpfloader succeeded, setting the same property is
         // harmless and idempotent.
         if (in_load_action && trimmed == "exec_start bpfloader" && !action_sets_property) {
-            out += "    setprop bpf.progs_loaded 1\\n";
+            out += "    setprop bpf.progs_loaded 1\n";
             action_sets_property = true;
             *changed = true;
         }
