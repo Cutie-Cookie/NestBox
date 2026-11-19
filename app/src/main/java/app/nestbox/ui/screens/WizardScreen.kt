@@ -151,7 +151,7 @@ fun WizardScreen(vm: AppViewModel, nav: NavHostController) {
                         }
                     }
                     Text(
-                        "Limits are caps, not reservations. The machine shares the phone's kernel and only uses what it needs.",
+                        if (d.preset == "unlimited") "Hardware max uses all ${vm.host.cpuCores} logical cores, up to ${vm.host.guestRamGb} GB of guest memory, and the display's ${vm.host.maxRefreshRate} Hz ceiling. Android keeps 10% of RAM for itself." else "Limits are caps, not reservations. The machine shares the phone's kernel and only uses what it needs.",
                         style = ui(Nb.T12, 400, Nb.Text3).copy(lineHeight = Nb.T12 * 1.45),
                         modifier = Modifier.padding(horizontal = 4.dp),
                     )
@@ -165,7 +165,7 @@ fun WizardScreen(vm: AppViewModel, nav: NavHostController) {
 
                 else -> {
                     val rom = Catalog.rom(d.rom)
-                    val p = Catalog.preset(d.preset)
+                    val p = vm.host.preset(d.preset)
                     val extras = listOfNotNull("Root".takeIf { d.root }, "LSPosed".takeIf { d.xposed }, "GMS".takeIf { d.gms }, "Share".takeIf { d.shared })
                     CardRows(
                         listOf(
