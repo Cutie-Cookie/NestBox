@@ -97,7 +97,7 @@ class RomStore(private val context: Context) {
     private fun findLocal(bytes: Long, sha256: String, progress: (Float, String) -> Unit): File? {
         @Suppress("DEPRECATION")
         val sd = android.os.Environment.getExternalStorageDirectory()
-        val dirs = listOf(File(sd, "Nestbox/roms"), File(sd, "Download"), File(sd, "Nestbox"))
+        val dirs = listOf(File(sd, "Nestbox/roms"), File(sd, "Download"), File(sd, "Documents"), File(sd, "Nestbox"))
         for (d in dirs) {
             val files = runCatching { d.listFiles() }.getOrNull() ?: continue
             for (f in files) {
