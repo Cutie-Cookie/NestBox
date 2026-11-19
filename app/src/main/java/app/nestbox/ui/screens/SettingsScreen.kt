@@ -117,11 +117,11 @@ fun SettingsScreen(vm: AppViewModel, nav: NavHostController) {
         ),
         "ROM tools" to listOf(
             Item.Link(
-                NbIcons.UploadFile, "Export Android 13 + Google",
+                NbIcons.UploadFile, "Export a copy of Android 13 + Google",
                 if (exportingRom) "Saving .vrom · ${(romExportProgress * 100).toInt()}%"
-                else "Export the built-in Android 13 + Google ROM · already shared with your machine",
+                else "Save a separate copy · the machine's original ROM stays in NestBox",
             ) {
-                if (!exportingRom) exportRom.launch("Android13-Google.vrom")
+                if (!exportingRom) exportRom.launch("Android13-Google-copy.vrom")
             },
         ),
 
