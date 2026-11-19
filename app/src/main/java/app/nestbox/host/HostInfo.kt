@@ -5,6 +5,10 @@ import android.app.ActivityManager
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.hardware.display.DisplayManager
+import android.view.Display
+import app.nestbox.vm.Catalog
+import kotlin.math.roundToInt
 import android.os.BatteryManager
 import android.os.Build
 
@@ -24,6 +28,29 @@ class HostInfo(private val context: Context) {
     val osVersion: String = prop("ro.mi.os.version.name").let { v ->
         Regex("""OS(\d+\.\d+)""").find(v)?.let { "HyperOS " + it.groupValues[1] } ?: "Android ${Build.VERSION.RELEASE}"
     }
+
+    /** Logical CPUs exposed by the phone's kernel. */
+    val cpuCores: Int = Runtime.getRuntime().availableProcessors().coerceAtLeast(1)
+
+    /** Leave 10% of physical RAM for Android; the guest may use the rest. */
+    val guestRamGb: Int = run {
+        val mi = ActivityManager.MemoryInfo()
+        context.getSystemService(ActivityManager::class.java).getMemoryInfo(mi)
+        ((mi.totalMem * 0.90) / (1024.0 * 1024 * 1024)).roundToInt().coerceIn(1, ramGb)
+    }
+
+    /** Highest refresh rate supported by the phone's built-in display. */
+    val maxRefreshRate: Int = runCatching {
+        context.getSystemService(DisplayManager::class.java)
+            .getDisplay(Display.DEFAULT_DISPLAY)?.supportedModes?.maxOfOrNull { it.refreshRate }
+            ?.roundToInt()?.coerceIn(30, 240) ?: 60
+    }.getOrDefault(60)
+
+    fun preset(id: String): Catalog.Preset =
+        if (id == "unlimited") Catalog.Preset(
+            "unlimited", "Hardware max", cpuCores, guestRamGb, maxRefreshRate,
+            "$cpuCores cores · $guestRamGb GB available · $maxRefreshRate Hz display",
+        ) else Catalog.preset(id)
 
     val socModel: String = if (Build.VERSION.SDK_INT >= 31) Build.SOC_MODEL else Build.HARDWARE
 
