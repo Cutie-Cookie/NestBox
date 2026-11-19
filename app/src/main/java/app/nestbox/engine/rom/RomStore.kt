@@ -56,8 +56,30 @@ class RomStore(private val context: Context) {
                         if (valid) return@withContext out
                         out.delete()
                     }
-                    // Copied to the phone by USB: read it where it is instead of downloading.
-                    findLocal(src.bytes, src.sha256, progress)?.let { return@withContext it }
+                    // A ROM copied into shared storage is a source, not the machine cache.
+                    // Copy it into filesDir/roms so every machine reuses the same private,
+                    // verified image. Never rename/move the user's original download.
+                    val local = findLocal(src.bytes, src.sha256, progress)
+                    if (local != null) {
+                        val part = File(out.path + ".local.part")
+                        part.delete()
+                        local.inputStream().use { input ->
+                            java.io.FileOutputStream(part).use { output ->
+                                copy(input, output, 0, src.bytes, "Copying shared ROM", progress)
+                            }
+                        }
+                        if (part.length() != src.bytes ||
+                            !sha256(part).equals(src.sha256, ignoreCase = true)
+                        ) {
+                            part.delete()
+                            throw IOException("The existing Android 13 ROM copy failed verification.")
+                        }
+                        if (!part.renameTo(out)) {
+                            part.delete()
+                            throw IOException("Could not cache the existing ROM without moving the original.")
+                        }
+                        return@withContext out
+                    }
                     download(src, out, progress)
                 }
                 Catalog.Source.Import -> {
