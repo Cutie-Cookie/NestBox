@@ -15,7 +15,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -26,7 +25,6 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import android.net.Uri
 import androidx.navigation.NavHostController
 import app.nestbox.BuildConfig
 import app.nestbox.settings.AppSettings
@@ -79,7 +77,7 @@ fun SettingsScreen(vm: AppViewModel, nav: NavHostController) {
                 NbIcons.Balance, "Default preset",
                 Catalog.presets.map { p ->
                     Option(p.id, p.name, if (p.id == "unlimited")
-                        "${vm.host.cpuCores} logical cores available · no RAM cap · up to ${vm.host.maxRefreshRate} Hz"
+                        "Use phone hardware automatically"
                     else p.sub)
                 }, { it.defaultPreset }, { a, k -> a.copy(defaultPreset = k) },
             ),
