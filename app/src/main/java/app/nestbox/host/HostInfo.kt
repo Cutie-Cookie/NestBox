@@ -42,7 +42,7 @@ class HostInfo(private val context: Context) {
     fun preset(id: String): Catalog.Preset =
         if (id == "unlimited") Catalog.Preset(
             "unlimited", "Hardware max", cpuCores, 0, maxRefreshRate,
-            "$cpuCores logical cores available · no RAM cap · up to $maxRefreshRate Hz",
+            "Use phone hardware automatically",
         ) else Catalog.preset(id)
 
     val socModel: String = if (Build.VERSION.SDK_INT >= 31) Build.SOC_MODEL else Build.HARDWARE
