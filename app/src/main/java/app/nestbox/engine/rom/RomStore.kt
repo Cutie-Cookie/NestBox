@@ -26,6 +26,22 @@ class RomStore(private val context: Context) {
         else -> File(dir, rom.id + ".vrom")
     }
 
+    /**
+     * Finds an already-downloaded ROM without starting a new download. Downloaded files are
+     * checksum-verified before export; USB-copied ROMs are found in the same locations as ensure().
+     */
+    fun existingFile(rom: Catalog.Rom, vmId: String = ""): File? {
+        val cached = fileFor(rom, vmId)
+        val source = rom.source
+        if (cached.isFile && cached.length() > 0) {
+            if (source !is Catalog.Source.File ||
+                (cached.length() == source.bytes && runCatching { sha256(cached) }.getOrNull().equals(source.sha256, true))
+            ) return cached
+        }
+        if (source !is Catalog.Source.File) return null
+        return findLocal(source.bytes, source.sha256) { _, _ -> }
+    }
+
     /** Makes sure the ROM file is on disk and returns it. [progress] gets 0..1 and a status line. */
     suspend fun ensure(rom: Catalog.Rom, vmId: String, importUri: String?, progress: (Float, String) -> Unit): File =
         withContext(Dispatchers.IO) {
