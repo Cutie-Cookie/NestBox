@@ -303,7 +303,14 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
      * Validate its manifest and image hashes first so Google apps and all image metadata
      * remain byte-for-byte intact for another NestBox import.
      */
-    fun exportAndroid13Rom(destination: Uri) {
+    fun hasCachedAndroid13Rom(): Boolean {
+        val rom = Catalog.rom("a13gapps")
+        val expected = (rom.source as? Catalog.Source.File)?.bytes ?: return false
+        val file = RomStore(app).fileFor(rom, "")
+        return file.isFile && file.length() == expected
+    }
+
+    fun exportAndroid13Rom(destination: Uri, selectedSource: Uri? = null) {
         if (_romExporting.value) return
         viewModelScope.launch {
             _romExporting.value = true
@@ -312,13 +319,31 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 withContext(Dispatchers.IO) {
                     val rom = Catalog.rom("a13gapps")
                     if (!rom.gms) throw IOException("The selected catalog ROM is not the Google-apps build.")
-                    val source = RomStore(app).existingFile(rom)
-                        ?: throw IOException("Android 13 + Google is not downloaded yet. Start an Android 13 + Google machine first.")
+                    val store = RomStore(app)
                     val sourceInfo = rom.source as? Catalog.Source.File
                         ?: throw IOException("The Android 13 ROM source metadata is unavailable.")
-                    if (source.length() != sourceInfo.bytes) throw IOException("The downloaded ROM is incomplete.")
+                    val source = store.existingFile(rom) ?: run {
+                        val uri = selectedSource
+                            ?: throw IOException("Choose the Android 13 + Google .vrom you already downloaded.")
+                        val imported = File(app.cacheDir, "android13-google-export-source.vrom")
+                        app.contentResolver.openInputStream(uri)?.use { input ->
+                            imported.outputStream().use { output ->
+                                val buffer = ByteArray(1 shl 20)
+                                var copied = 0L
+                                while (true) {
+                                    val n = input.read(buffer)
+                                    if (n < 0) break
+                                    output.write(buffer, 0, n)
+                                    copied += n
+                                    _romExportProgress.value = (copied.toFloat() / sourceInfo.bytes).coerceIn(0f, 0.35f)
+                                }
+                            }
+                        } ?: throw IOException("The selected .vrom file could not be opened.")
+                        imported
+                    }
+                    if (source.length() != sourceInfo.bytes) throw IOException("The selected ROM is incomplete or is not the patched Android 13 + Google download.")
                     val sourceSha = RomStore.sha256(source)
-                    if (!sourceSha.equals(sourceInfo.sha256, true)) throw IOException("The downloaded ROM checksum does not match the Google-enabled catalog image.")
+                    if (!sourceSha.equals(sourceInfo.sha256, true)) throw IOException("The selected ROM checksum does not match the patched Google-enabled catalog image.")
 
                     // This is NestBox's VROM container: manifest.json + system.img,
                     // and optional vendor.img. A raw GSI or renamed ZIP is not equivalent.
@@ -460,7 +485,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     fun takeSnapshot(id: String) {
         val vm = repo.get(id) ?: return
         val time = SimpleDateFormat("HH:mm", Locale.US).format(Date())
-        val size = "%.1f GB".format(Locale.US, 1.2 + Catalog.preset(vm.preset).ramGb * 0.3)
+        val size = "%.1f GB".format(Locale.US, 1.2 + host.preset(vm.preset).ramGb * 0.3)
         repo.update(id) { it.copy(snapshots = listOf(Snapshot("Snapshot " + (it.snapshots.size + 1), "Today · $time", size)) + it.snapshots) }
         showToast("Snapshot saved")
     }
