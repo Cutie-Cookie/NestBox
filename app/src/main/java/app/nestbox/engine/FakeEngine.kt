@@ -67,7 +67,7 @@ class FakeEngine(private val host: HostInfo) : VmEngine {
 
     override fun health(vmId: String): Flow<Health> = flow {
         while (true) {
-            val p = Catalog.preset(presets[vmId] ?: "balanced")
+            val p = host.preset(presets[vmId] ?: "balanced")
             val t = System.currentTimeMillis() / 1000.0
             val booting = flowFor(vmId).value is VmState.Booting
             val ramGb = p.ramGb * if (booting) 0.3 else 0.6
@@ -88,7 +88,7 @@ class FakeEngine(private val host: HostInfo) : VmEngine {
         "[0.08] container: pid/mount ns ready · shared host kernel",
         "[0.31] init: starting servicemanager, vold",
         "[0.64] gralloc: gfxstream · Vulkan · ${host.gpu}",
-        "[1.02] surfaceflinger: ${vm.res.replace('×', 'x')} @ ${Catalog.preset(vm.preset).fps}",
+        "[1.02] surfaceflinger: ${vm.res.replace('×', 'x')} @ ${host.preset(vm.preset).fps}",
         "[1.47] zygote64: started",
         if (vm.root) "[2.30] magisk: su daemon ready" else "[2.30] keystore: ready",
         "[2.88] sys.boot_completed=1",
