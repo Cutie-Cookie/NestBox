@@ -389,12 +389,17 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                         digest.digest().joinToString("") { "%02x".format(it) }
                     } ?: throw IOException("The saved file could not be reopened for verification.")
                     if (!savedSha.equals(sourceInfo.sha256, true)) throw IOException("The saved .vrom did not pass its read-back checksum.")
+                    // Export is a copy operation. Assert the shared source still exists and
+                    // matches the catalog after writing the destination.
+                    if (!source.isFile || source.length() != sourceInfo.bytes ||
+                        !RomStore.sha256(source).equals(sourceInfo.sha256, true)
+                    ) throw IOException("The exported copy is valid, but the original shared ROM cache was not preserved.")
                 }
             }
             _romExporting.value = false
             result.onSuccess {
                 _romExportProgress.value = 1f
-                showToast("Verified NestBox VROM exported · Google apps included")
+                showToast("Verified ROM copy saved · original machine ROM retained")
             }.onFailure {
                 showToast(it.message ?: "Could not export the Android 13 ROM")
             }
