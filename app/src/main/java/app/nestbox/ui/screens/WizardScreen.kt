@@ -169,9 +169,10 @@ fun WizardScreen(vm: AppViewModel, nav: NavHostController) {
                     val p = vm.host.preset(d.preset)
                     val extras = listOfNotNull("Root".takeIf { d.root }, "LSPosed".takeIf { d.xposed }, "GMS".takeIf { d.gms }, "Share".takeIf { d.shared })
                     CardRows(
-                        listOf(
+                        listOfNotNull(
                             "Name" to d.name, "System" to rom.name, "Preset" to p.name,
-                            "Limits" to if (d.preset == "unlimited") "No CPU/RAM cap" else "${p.cores} cores · ${p.ramGb} GB", "Display" to if (d.preset == "unlimited") d.res else "${d.res} · ${p.fps} fps",
+                            ("Limits" to "${p.cores} cores · ${p.ramGb} GB").takeIf { d.preset != "unlimited" },
+                            "Display" to if (d.preset == "unlimited") d.res else "${d.res} · ${p.fps} fps",
                             "Extras" to (extras.joinToString(" · ").ifEmpty { "None" }),
                         )
                     ) { (k, v) -> KeyValueRow(k, v) }
