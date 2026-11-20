@@ -95,7 +95,7 @@ object HostDiagnostics {
     }
 
     private fun selectedLines(text: String, prefixes: List<String>): String =
-        text.lineSequence().filter { line -> prefixes.any(line::startsWith) }.joinToString("\n").ifBlank { UNAVAILABLE }
+        text.lineSequence().filter { line -> prefixes.any { prefix -> line.startsWith(prefix) } }.joinToString("\n").ifBlank { UNAVAILABLE }
 
     private fun read(path: String): String = runCatching {
         val file = File(path)
