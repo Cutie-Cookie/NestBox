@@ -149,3 +149,9 @@ Not yet verified:
 - Updated machine shutdown collection to save a runtime snapshot for both successful running sessions and boot failures when Save Boot Logs is enabled. This is intended to provide useful measurements from a known-good Android 13 guest without adb or root.
 - Relevant code commits: `3b0963755e3582ce38cece274c741ece8665ca5f`, `72bf27e186db41ef0bd1f17d1aa516646cb429c3`, `25e8dd68cc570f16392289ba5d063ec04a398918`, `b9d1cbb10cc72556aad2409f3c466d5556487c9a`, `0ce9e0656556dd3f909b329c6ddfd767374578ea`, `4316a751e867cf42f315f90b28eb711d1e2fa00e`.
 - No CPU affinity, cpuset, scheduler, frequency, or guest memory behavior has been changed. No compatibility claim is made from source inspection alone. Next: inspect the diff for correctness, run the full Build 61-preserving workflow, monitor its compile/restore/sign/verification stages, and only after the user installs the exact verified artifact collect actual Itel P55 runtime snapshots.
+
+
+### Diagnostics implementation correction — 2026-11-20
+
+- During source review before accepting a build, caught that the generated Kotlin raw shell string had an incorrectly escaped `$f` variable in its guest cgroup loop. The malformed line was corrected to Kotlin's literal-dollar expression `"${'$'}f"` and the full loop was restored. This was caught by inspection before any build was accepted; the earlier source revision must not be treated as buildable. Correction commit: `9bedbb4518af6434ab9bd6379ca47d98d2989590`.
+- This correction is retained in the worklog rather than erasing the failed intermediate attempt. The latest full workflow must compile the corrected source.
