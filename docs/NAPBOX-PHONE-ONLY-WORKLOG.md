@@ -161,3 +161,25 @@ Not yet verified:
 
 - Corrected `.github/workflows/android11-aarch32-fix.yml` to read the established GitHub Actions secrets `NESTBOX_KEYSTORE_BASE64` and `NESTBOX_KEYSTORE_PASSWORD` in both the Gradle signing-key restore step and independent certificate verification step. The workflow no longer references `NAPBOX_KEYSTORE_*` secret names. Commit: `a8a594396293cd78d964d1e0406c59e6e847f952`.
 - The earlier overlapping runs were triggered before this workflow correction and are not accepted as the final signing verification. A new full workflow run on the corrected branch head must prove that the established secrets are available and that the NapBox certificate fingerprint still matches. No secret values are recorded or exposed.
+
+
+## CI failures and signing diagnosis — 2026-11-20
+
+- Run #140, ID `44754852143`, commit `3b0963755e3582ce38cece274c741ece8665ca5f`, completed successfully. It only compiled the standalone host-diagnostics class before guest/runtime integration was added; it is not the diagnostic build to deliver.
+- Runs #141–#151 did not produce a valid APK:
+  - #141 `44754912490`
+  - #142 `44754956744`
+  - #143 `44754990484`
+  - #144 `44755003992`
+  - #145 `44755115806`
+  - #146 `44755147172`
+  - #147 `44755370182`
+  - #148 `44755457769`
+  - #149 `44755500295`
+  - #150 `44755613147`
+  - #151 `44755679127`
+- These runs used intermediate source revisions. The Kotlin raw string for the guest cgroup probe was malformed in an early edit; a subsequent update also duplicated the trailing methods of `ModernEngine.kt` (the file grew from 517 to 2,215 lines). Gradle reported Kotlin syntax errors around the guest shell loop, followed by cascading unresolved references and duplicate declarations. These were caught in CI and no such artifact was accepted. The source was restored from the clean pre-diagnostics file at commit `6be1febaaba4cfe782e743946082e4057c32100c`, then the diagnostics were reapplied with single-occurrence anchor checks and verified to have one `openDisplay` and one `stop` method. Repair commit: `33ed7c448dea783b34177b3ed6b84eb822688891`.
+- Run #153, ID `44756025116`, commit `286b1c0d48df38e01a311a2a9605fe6d8684c480`: native Vulkan backend, tawcroot, rootless helper, required ARM64 library checks, Gradle setup and signing-key restore all passed. `compileDebugKotlin`, Java compilation and DEX tasks passed. Packaging failed at `:app:packageDebug` with the exact error: `No key with alias 'napbox-release' found in keystore app/signing.keystore`. This proves the existing `NESTBOX_KEYSTORE_BASE64` secret decodes with its password but its keystore does not contain the required NapBox alias. It is a signing-store contents mismatch, not a source compilation failure.
+- Workflow file `.github/workflows/android11-aarch32-fix.yml` now prints only the keystore alias names and public SHA-256 certificate fingerprints during the signing restore step, without printing secret values. Commit: `2a10e702b01a125b4105d4b2776c1200f8542bea`. The next full run is needed to identify the aliases/fingerprints inside the NESTBOX keystore. Do not deliver an APK or change the expected NapBox certificate based on an unverified store.
+- The earlier successful Build #132 used the separate `NAPBOX_*` secret names and verified the expected NapBox certificate, but permanent project instructions require the established `NESTBOX_*` names. The workflow has been corrected to use NESTBOX names. Do not silently switch back; inspect the NESTBOX store metadata first. If it contains an old/different key, the values under the existing NESTBOX secret names need to be updated to the NapBox keystore, without creating renamed secrets. No signing secret values are written to the repository or worklog.
+- Run #152, ID `44755958912`, is an overlapping build of the corrected Kotlin source before the final memory-plan documentation commit; monitor its terminal result as well. The authoritative source head after the signing metadata step is the later active branch commit.
