@@ -13,7 +13,7 @@ original = Path(sys.argv[1])
 built = Path(sys.argv[2])
 baksmali_jar = Path(sys.argv[3])
 smali_jar = Path(sys.argv[4])
-expected = "50049680418b072934360af4116c01b5a194af6a90459fd21cdb26b3b68cfa05"
+expected = "68a137d9ea08ab71bbd788c99993007a4d763573efbda126a530cf377d0707ab"
 
 digest = hashlib.sha256(original.read_bytes()).hexdigest()
 if digest != expected:
@@ -71,8 +71,11 @@ with zipfile.ZipFile(original, "r") as src, zipfile.ZipFile(built, "r") as curre
         current_classes.update(dex_classes(current.read(name)))
 
     original_dex_name = "classes14.dex"
+    original_backup_name = "assets/nestbox/original/classes14.dex"
     if original_dex_name not in src.namelist() or original_dex_name in current_names:
-        raise SystemExit("Expected original-only classes14.dex was not found")
+        raise SystemExit("Expected Build 61 classes14.dex was not found or already exists in current build")
+    if original_backup_name not in src.namelist():
+        raise SystemExit("Build 61 reference is missing the byte-for-byte original classes14.dex backup")
 
     # The old DEX shares many dependency definitions with the newer build.
     # Disassemble it, remove class definitions already supplied by current DEX
@@ -111,10 +114,12 @@ with zipfile.ZipFile(original, "r") as src, zipfile.ZipFile(built, "r") as curre
         overlap = current_classes.intersection(filtered_classes)
         if overlap:
             raise SystemExit(f"Filtered classes14.dex still has {len(overlap)} duplicate classes")
-        original_dex_bytes = src.read(original_dex_name)
+        # Build 61 already contains the filtered runtime DEX plus the exact original DEX backup.
+        # Preserve the backup, not the already-filtered runtime copy.
+        original_dex_bytes = src.read(original_backup_name)
         print(f"Original classes14.dex: retained {kept_classes} unique classes; removed {removed_classes} duplicate definitions")
 
-    added = [n for n in src.namelist() if n not in current_names and n != original_dex_name and not is_signature_entry(n)]
+    added = [n for n in src.namelist() if n not in current_names and n not in (original_dex_name, original_backup_name) and not is_signature_entry(n)]
     skipped_signatures = [n for n in src.namelist() if is_signature_entry(n)]
     collisions = sorted(n for n in original_names & current_names if not is_signature_entry(n))
 
