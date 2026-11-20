@@ -377,18 +377,18 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-          NAPBOX_KEYSTORE_BASE64: ${{ secrets.NAPBOX_KEYSTORE_BASE64 }}
-          NAPBOX_KEYSTORE_PASSWORD: ${{ secrets.NAPBOX_KEYSTORE_PASSWORD }}
+          NESTBOX_KEYSTORE_BASE64: ${{ secrets.NESTBOX_KEYSTORE_BASE64 }}
+          NESTBOX_KEYSTORE_PASSWORD: ${{ secrets.NESTBOX_KEYSTORE_PASSWORD }}
         run: |
           set -euo pipefail
-          : "${NAPBOX_KEYSTORE_BASE64:?Missing GitHub secret NAPBOX_KEYSTORE_BASE64}"
-          : "${NAPBOX_KEYSTORE_PASSWORD:?Missing GitHub secret NAPBOX_KEYSTORE_PASSWORD}"
-          printf '%s' "$NAPBOX_KEYSTORE_BASE64" | base64 --decode > app/signing.keystore
+          : "${NESTBOX_KEYSTORE_BASE64:?Missing GitHub secret NESTBOX_KEYSTORE_BASE64}"
+          : "${NESTBOX_KEYSTORE_PASSWORD:?Missing GitHub secret NESTBOX_KEYSTORE_PASSWORD}"
+          printf '%s' "$NESTBOX_KEYSTORE_BASE64" | base64 --decode > app/signing.keystore
           test -s app/signing.keystore
           echo "SIGNING_STORE_FILE=$GITHUB_WORKSPACE/app/signing.keystore" >> "$GITHUB_ENV"
-          echo "SIGNING_STORE_PASSWORD=$NAPBOX_KEYSTORE_PASSWORD" >> "$GITHUB_ENV"
+          echo "SIGNING_STORE_PASSWORD=$NESTBOX_KEYSTORE_PASSWORD" >> "$GITHUB_ENV"
           echo "SIGNING_KEY_ALIAS=napbox-release" >> "$GITHUB_ENV"
-          echo "SIGNING_KEY_PASSWORD=$NAPBOX_KEYSTORE_PASSWORD" >> "$GITHUB_ENV"
+          echo "SIGNING_KEY_PASSWORD=$NESTBOX_KEYSTORE_PASSWORD" >> "$GITHUB_ENV"
 
       - name: Build debug APK
         run: ./gradlew --no-daemon clean assembleDebug
@@ -397,8 +397,8 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-          NAPBOX_KEYSTORE_BASE64: ${{ secrets.NAPBOX_KEYSTORE_BASE64 }}
-          NAPBOX_KEYSTORE_PASSWORD: ${{ secrets.NAPBOX_KEYSTORE_PASSWORD }}
+          NESTBOX_KEYSTORE_BASE64: ${{ secrets.NESTBOX_KEYSTORE_BASE64 }}
+          NESTBOX_KEYSTORE_PASSWORD: ${{ secrets.NESTBOX_KEYSTORE_PASSWORD }}
         run: |
           set -euo pipefail
           APK="app/build/outputs/apk/debug/app-debug.apk"
@@ -423,16 +423,16 @@ jobs:
           echo "32fa0e88a6c397b3922201adf5f3e534fbaed5a663c71d0c558c3ddce0af844a  $SMALI" | sha256sum -c -
           python3 -I scripts/merge_original_apk.py "$ORIGINAL" "$APK" "$BAKSMALI" "$SMALI"
           "$ANDROID_HOME/build-tools/35.0.0/zipalign" -f 4 "$APK" "$RUNNER_TEMP/app-aligned.apk"
-          : "${NAPBOX_KEYSTORE_BASE64:?Missing GitHub secret NAPBOX_KEYSTORE_BASE64}"
-          : "${NAPBOX_KEYSTORE_PASSWORD:?Missing GitHub secret NAPBOX_KEYSTORE_PASSWORD}"
-          printf '%s' "$NAPBOX_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/NapBox-release.p12"
+          : "${NESTBOX_KEYSTORE_BASE64:?Missing GitHub secret NESTBOX_KEYSTORE_BASE64}"
+          : "${NESTBOX_KEYSTORE_PASSWORD:?Missing GitHub secret NESTBOX_KEYSTORE_PASSWORD}"
+          printf '%s' "$NESTBOX_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/NapBox-release.p12"
           test -s "$RUNNER_TEMP/NapBox-release.p12"
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign \
             --ks "$RUNNER_TEMP/NapBox-release.p12" \
             --ks-type PKCS12 \
             --ks-key-alias napbox-release \
-            --ks-pass env:NAPBOX_KEYSTORE_PASSWORD \
-            --key-pass env:NAPBOX_KEYSTORE_PASSWORD \
+            --ks-pass env:NESTBOX_KEYSTORE_PASSWORD \
+            --key-pass env:NESTBOX_KEYSTORE_PASSWORD \
             --out "$RUNNER_TEMP/app-signed.apk" "$RUNNER_TEMP/app-aligned.apk"
           mv "$RUNNER_TEMP/app-signed.apk" "$APK"
 
