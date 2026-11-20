@@ -110,3 +110,12 @@ Not yet verified:
 - Independent ZIP comparison against Build 61: 0 missing non-signature entries; only expected signature metadata was replaced; one new compiled launcher-cat resource added; 9 same-path entries changed (manifest, six current DEX files, patched `libvine_helper.so`, adaptive launcher XML, and `resources.arsc`). Required original-only libraries and both DEX files were present; `classes14.dex`, its original backup, and the original-only `libOpenglRender.so`, `libloader.so`, `libtwoyi.so` matched Build 61 byte-for-byte. Total ARM64 native library entries: 22.
 - This verifies a complete signed APK and preservation of Build 61's non-signature archive entries. It does not prove runtime compatibility or actual home-screen icon rendering; those require the user's Android 13 phone test.
 - User requested ZIP delivery rather than a direct APK link. Delivered file is the workflow artifact ZIP; it is smaller (33.6 MB) than the contained APK (80.5 MB).
+
+
+## User device test and log folder branding fix — 2026-11-20
+
+- User installed the complete NapBox ZIP build on the Itel P55 and confirmed: installs separately from NestBox; theme and launcher icon are correct; creating and booting the built-in Android 13 GApps ROM works perfectly.
+- User noticed boot logs were being written to the legacy shared-storage folder `/sdcard/Nestbox/logs`.
+- Updated `app/src/main/java/app/nestbox/engine/BootLogs.kt` to write to `/sdcard/NapBox/logs`; updated fallback path documentation to `Android/data/app.napbox/files/logs`.
+- Commit: `d25d4ce6fae287649ce67dc0a2ec92aa8399541f` on `phone-only/build61-baseline`.
+- This is a small storage-path branding fix only. The previous tested APK's runtime results remain valid for its code; the new path change requires a new build/install to verify the new location. Do not imply the new path has been phone-tested until the user checks it.
