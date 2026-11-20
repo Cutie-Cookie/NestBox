@@ -85,6 +85,30 @@ The keystore password and Base64 are sensitive. Do not put either secret value i
 7. Download the exact successful artifact and verify its identity, signature/certificate, required native libraries, DEX structure/backups, original assets/resources, and APK entry/hash differences against Build 61.
 8. Ask the user to install/test only when the APK has passed artifact checks. Do not claim runtime compatibility until device testing confirms it.
 
+## 8. Itel P55 compatibility and phone-specific preset
+
+The user wants a new preset dedicated to the Itel P55, alongside Battery, Balanced, and Performance. This is a separate phase after core compatibility is understood; do not add a preset by guessing values.
+
+### First phase: measure before tuning
+
+1. Establish the current known-good baseline using the built-in Android 13 Google-services ROM that the user confirmed creates and boots on the phone.
+2. Audit the current engine path and its CPU semantics. The UI presets currently request 2, 4, and 6 cores, and `ModernEngine` passes the selected value as `cpu_cores` to the native helper. Determine whether this controls visible guest CPUs, allowed host CPUs, worker threads, or another limit before changing it.
+3. Collect read-only host diagnostics where Android permissions allow: online CPU list and topology, per-policy CPU frequencies/capacity, process CPU affinity and cgroup/cpuset quota, host available memory and low-memory threshold, app/guest PSS, memory cgroup limits/events, and thermal status/temperature. Missing or restricted sysfs values must be reported as unavailable, not guessed.
+4. Collect guest-side diagnostics after boot: guest-visible CPU count, CPU topology/affinity if exposed, guest memory totals, service state, graphics renderer, and boot completion.
+5. Change one evidence-backed compatibility issue at a time and compare against the known-good baseline.
+
+### CPU design principle
+
+The Itel P55's T606 is an 8-core heterogeneous SoC (2 Cortex-A75 performance cores + 6 Cortex-A55 efficiency cores). The goal is to make all eight eligible for guest work when the host scheduler and engine permit it—not to pin the guest to the two A75 cores, force maximum frequencies, or keep every core busy continuously. Android/Linux scheduling and thermal management should continue to choose where runnable work executes. Confirm what `cpu_cores` means in the native helper before setting the phone-specific preset to 8. Do not add custom affinity pinning or frequency writes unless measurements prove a specific need and the change is safe and reversible.
+
+### Phone-specific preset
+
+Add a dedicated Itel P55 preset only after measuring real host limits and validating the existing Android 13 guest. It should expose the most useful safe CPU capacity, choose a sustainable RAM cap rather than the phone's advertised 8 GB, and select a sensible refresh-rate target. Preserve the three existing presets unchanged. The new preset must be optional and must not override the host's thermal or memory-pressure controls.
+
+### Compatibility order
+
+Prioritize reliable machine creation and repeatable boot, graphics/display stability, guest memory stability, input/audio/network/storage, then CPU and frame-rate tuning. A phone-specific preset is not a substitute for fixing boot or graphics incompatibilities.
+
 ## 7. Definition of done
 
 A fix is complete only when:
