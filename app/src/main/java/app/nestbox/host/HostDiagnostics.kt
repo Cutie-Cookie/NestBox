@@ -4,6 +4,7 @@ import android.app.ActivityManager
 import android.content.Context
 import android.os.Build
 import android.os.PowerManager
+import android.provider.Settings
 import java.io.File
 import java.util.Locale
 
@@ -34,6 +35,11 @@ object HostDiagnostics {
         appendLine("threshold_bytes=${mi.threshold}")
         appendLine("low_memory=${mi.lowMemory}")
         appendLine("proc_meminfo:\n${read("/proc/meminfo")}")
+        appendLine()
+        appendLine("[activity_manager_settings]")
+        appendLine("global_max_phantom_processes=${globalSetting(context, "max_phantom_processes")}")
+        appendLine("global_max_cached_processes=${globalSetting(context, "max_cached_processes")}")
+        appendLine("global_settings_enable_monitor_phantom_procs=${globalSetting(context, "settings_enable_monitor_phantom_procs")}")
         appendLine()
         appendLine("[cpu]")
         appendLine("online=${read("/sys/devices/system/cpu/online")}")
@@ -111,6 +117,10 @@ object HostDiagnostics {
             (intent?.getIntExtra(android.os.BatteryManager.EXTRA_TEMPERATURE, -1) ?: -1).let { if (it >= 0) String.format(Locale.ROOT, "%.1f", it / 10.0) else UNAVAILABLE }
         }.getOrDefault(UNAVAILABLE)}")
     }
+
+    private fun globalSetting(context: Context, key: String): String =
+        runCatching { Settings.Global.getString(context.contentResolver, key) }
+            .getOrNull()?.takeIf { it.isNotBlank() } ?: UNAVAILABLE
 
     private fun selectedLines(text: String, prefixes: List<String>): String =
         text.lineSequence().filter { line -> prefixes.any { prefix -> line.startsWith(prefix) } }.joinToString("\n").ifBlank { UNAVAILABLE }
