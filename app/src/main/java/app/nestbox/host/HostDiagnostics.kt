@@ -73,12 +73,15 @@ object HostDiagnostics {
         appendLine()
         appendLine("[process_and_cgroups]")
         appendLine("self_cgroup:\n${read("/proc/self/cgroup")}")
+        appendLine("self_limits:\n${read("/proc/self/limits")}")
+        appendLine("self_schedstat:\n${read("/proc/self/schedstat")}")
         appendLine("cpu_pressure:\n${read("/proc/pressure/cpu")}")
         appendLine("memory_pressure:\n${read("/proc/pressure/memory")}")
         val cgroupFiles = listOf(
             "cpu.max", "cpu.stat", "cpu.cfs_quota_us", "cpu.cfs_period_us",
             "cpuset.cpus", "cpuset.cpus.effective", "memory.max", "memory.current",
-            "memory.high", "memory.events", "memory.limit_in_bytes", "memory.usage_in_bytes"
+            "memory.high", "memory.events", "memory.limit_in_bytes", "memory.usage_in_bytes",
+            "pids.max", "pids.current", "pids.events"
         )
         val paths = linkedSetOf("/sys/fs/cgroup")
         read("/proc/self/cgroup").lineSequence().forEach { line ->
