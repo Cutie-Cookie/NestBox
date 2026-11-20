@@ -264,3 +264,22 @@ Not yet verified:
   - Host GPU devfreq telemetry: c5c218105d121cceff19561202d55abb3e6d2942 (workflow #167, run ID 44767130349).
 - These are measurement-only changes. No performance settings, CPU affinity, frequencies, memory budgets, refresh targets, Low memory mode, or GPU backend were altered. No claim of an FPS fix is made; the new logs are intended to identify whether the bottleneck is frame pacing, GPU saturation, or guest-side overhead.
 - Full Build 61 workflow status and final artifact verification are pending; record terminal results and artifact comparison below before offering a new diagnostic APK.
+
+
+## Guest-wide low-FPS confirmation, boot warnings, and telemetry build #169 — 2026-11-20
+
+- User clarified that low FPS is noticeable across the entire Android guest, including the guest home screen and apps; the host phone UI remains smooth. This points to a guest-wide rendering/scheduling issue rather than one app-specific workload. Root cause remains unproven because the prior health API reports fps=-1 and no actual FPS measurements had been captured.
+- User supplied a screenshot of the next normal boot. The visible guest init messages were:
+  - `init: Unable to write -1000 to /proc/1/oom_score_adj` / permission denied.
+  - `init: Failed to unmount /debug_ramdisk: Invalid argument`.
+  - `selinux: Could not set context for /data: Operation not supported on transport endpoint`.
+  User reports the machine subsequently booted normally with no boot failure. Treat these as non-fatal rootless-environment compatibility warnings for this observed boot, not as proof of the low-FPS cause. Do not alter rootless mounts, SELinux behavior, or init permissions without evidence; avoid destabilizing successful boot.
+- Telemetry source changes are present on the active branch and the latest full Build 61 workflow #169 completed successfully:
+  - run ID `44767187829`, commit `b6ff5b351ff49dd1ba1282c704894e4cdae8b99c`, branch `phone-only/build61-baseline`.
+  - Workflow job ID `136394841241`, conclusion success. Build, Build 61 restoration/merge, APK verification and artifact upload all succeeded.
+  - Artifact ID `14646288486`, name `NapBox-arm64-v8a-debug-complete`, ZIP SHA-256 `0d9fad3e612e34dd68277f6e70f3ada0b9007a9a68d482d8c34a0b62c6f25c0a`, size 33,605,605 bytes.
+  - Inner APK SHA-256 `cbb146d0ab2f3d97df90ee8454b9818195d6663931517f5c6dd3bc073a6b21e9`, size 80,542,321 bytes. CI log reports v3 signature verification true, required NapBox certificate fingerprint check passed, package `app.napbox`, min SDK 29, and all 16 required ARM64 libraries present.
+- Downloaded and independently inspected artifact ZIP and inner APK. ZIP contains exactly `app-debug.apk`. ZIP SHA-256 independently matches GitHub artifact digest. Compared inner APK against Build 61 reference APK (286 baseline entries vs 287 candidate): no missing non-signature entries; only added non-signature path is intended `res/mipmap-nodpi-v4/ic_launcher_cat.png`; 11 changed non-signature paths are `AndroidManifest.xml`, `META-INF/MANIFEST.MF`, DEX files `classes11.dex`, `classes2.dex`–`classes5.dex`, `classes7.dex`, `lib/arm64-v8a/libvine_helper.so`, adaptive launcher XML, and `resources.arsc`. These are consistent with current app/runtime changes and NapBox branding; no unexpected missing paths found.
+- Independent comparison confirms both runtime `classes14.dex` and `assets/nestbox/original/classes14.dex` are byte-identical to Build 61. All 16 required ARM64 libraries are present and there are no non-ARM64 native-library paths. Workflow log confirms original archive 286 entries, 131 original-only paths restored, 150 collisions retained from current build, 2,236 unique classes retained in runtime classes14.dex, original backup preserved, and original non-signature paths verified.
+- Local container did not have apksigner available for a second local certificate inspection; rely on the successful workflow's explicit `apksigner verify --print-certs` check and expected fingerprint grep. No claim of local independent certificate re-verification is made.
+- Telemetry changes are observational only: SurfaceFlinger layers/latency, gfxinfo summary, and best-effort host GPU/Mali devfreq/busy counters. No performance settings, CPU affinity/frequency, memory budget, refresh target, Low memory mode, or graphics backend were changed. The artifact is ready for the next controlled device diagnostic run, not an FPS fix and not proof of runtime performance improvement.
