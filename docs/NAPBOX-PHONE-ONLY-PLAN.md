@@ -159,3 +159,17 @@ Graphics and guest:
 - Other permission-denied and missing host-kernel-interface messages occur in the rootless environment. No evidence yet that they prevented boot.
 
 No source, CPU affinity, frequency, memory-budget, or graphics behavior was changed based on this first snapshot. Next: ask whether the user noticed lag, flicker, freezes, audio issues, or unusual heating during this session; if performance tuning is needed, collect a second snapshot after a longer representative workload and compare host available memory/PSS/swap/thermal values. Investigate the fence warnings only against observed graphics symptoms. Do not infer independent guest RAM from guest meminfo.
+
+
+## Low-FPS report and rendering investigation — 2026-11-20
+
+The user reports that the Android 13 guest feels laggy/low-FPS while the host phone remains smooth, with no flicker, freezes, or unusual heating. This is a guest-only performance symptom; do not classify the fence warnings as a confirmed graphics failure.
+
+Source audit after the first diagnostic:
+- Current test used Performance preset: 720×1600, 90 FPS target, GPU acceleration enabled, global Low memory mode enabled.
+- Performance preset requests 6 cores, 4 GB lmkd budget and 90 FPS. The rootless helper CPU preset is not enforced (previously verified), so the host scheduler currently sees all 8 CPUs as eligible. The 4 GB value is an lmkd budget, not a reserved guest RAM cap.
+- ModernEngine calls VineRuntime.setDisplayFrameRate(display, preset.fps), and passes refresh=$fps to the rootless helper. The guest reports ANGLE/Vulkan over gfxstream/Mali-G57. This establishes the selected target/backend, not the achieved frame rate.
+- Global Low memory mode is enabled by default. GuestProps applies Android Go/low-RAM properties, smaller Dalvik heap growth/maximum sizes, and limits dex2oat threads to 2; after boot it limits cached processes to 8. These settings may cause app-level GC/cache churn under some workloads, but there is no evidence yet that they are the cause of low FPS.
+- The current ModernEngine.health() reports fps=-1 (not measured), so NapBox has no valid actual-FPS telemetry. The existing stop snapshot does not capture SurfaceFlinger frame timing or GPU utilization/frequency. This is a measurement gap.
+- Do not change CPU affinity, governor/frequency, guest memory budget, or GPU backend based only on this report. First add read-only frame timing and best-effort GPU devfreq/busy telemetry, then compare an identical guest workload. Keep existing Build 61 restoration/merge/packaging/signing intact.
+- A reversible user-side A/B check can compare the same guest workload at 90-FPS Performance vs 60-FPS Balanced, holding 720×1600 constant. This tests whether the 90-FPS target is overambitious; it does not establish actual FPS or CPU-core differences. Do not simultaneously change Low memory mode, since that would confound the comparison and could increase host memory pressure.
