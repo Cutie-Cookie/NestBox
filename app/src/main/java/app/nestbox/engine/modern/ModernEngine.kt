@@ -381,6 +381,9 @@ class ModernEngine(
             appendLine("Machine: ${v.name} (${v.id}) · Modern · ${v.romId} · ${v.preset} · ${v.res}")
             appendLine("Phone: ${host.deviceName} · ${host.osVersion} · ${host.socName} · ${host.gpu}")
             appendLine("GPU acceleration setting: ${settings.gpuAcceleration}")
+            val processTree = ProcUtil.descendants(android.os.Process.myPid()) + android.os.Process.myPid()
+            appendLine("NapBox + guest process count: ${processTree.size}")
+            appendLine("NapBox + guest summed PSS bytes: ${ProcUtil.pssBytes(processTree)}")
             appendLine("Snapshot reason: $message")
         }
         texts["host-runtime.txt"] = HostDiagnostics.snapshot(context)
