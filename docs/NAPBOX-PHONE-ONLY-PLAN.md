@@ -182,3 +182,15 @@ To address the user's guest-only low-FPS report without guessing at tuning, the 
 - Host snapshot now probes matching GPU/Mali/3D entries under /sys/class/devfreq for current/min/max frequency, available frequencies, governor, load/busy/total time and polling interval. Restricted or absent nodes are reported unavailable.
 - No CPU affinity, governor, frequency, GPU backend, display refresh target, Low memory mode, or memory budget is changed.
 - The diagnostic build must still pass the complete Build 61 restoration/merge/package/alignment/signing workflow and all artifact checks. The user must install and run it to obtain the new telemetry; no FPS improvement is claimed by instrumentation alone.
+
+
+## Android process-limit interpretation — 2026-11-20
+
+Keep these independent controls separate in all diagnostics and conclusions:
+
+- `/proc/self/limits` → `Max processes` is the process's RLIMIT_NPROC value. The P55 snapshot reported 29,710. It is not Android's phantom-process ceiling.
+- Android's host phantom-process setting is the user's separately configured `Settings.Global` key `max_phantom_processes`. The user reports deliberately setting it to 128 (previously 32). NapBox must only read this value; it must never raise, lower, or otherwise write the host setting.
+- The guest's Settings.Global / DeviceConfig values and any guest runtime overrides are separate from the host setting. Do not treat them as evidence of the host value.
+- A process-tree count is not Android's phantom-process accounting and cannot prove whether the phantom-process limit is being approached.
+
+The next phone snapshot should confirm the host value from the new read-only `HostDiagnostics` field `global_max_phantom_processes`. If it reports unavailable, preserve that uncertainty rather than substituting RLIMIT_NPROC or a guest value.
