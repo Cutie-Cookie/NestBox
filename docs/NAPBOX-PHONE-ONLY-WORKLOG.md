@@ -155,3 +155,9 @@ Not yet verified:
 
 - During source review before accepting a build, caught that the generated Kotlin raw shell string had an incorrectly escaped `$f` variable in its guest cgroup loop. The malformed line was corrected to Kotlin's literal-dollar expression `"${'$'}f"` and the full loop was restored. This was caught by inspection before any build was accepted; the earlier source revision must not be treated as buildable. Correction commit: `9bedbb4518af6434ab9bd6379ca47d98d2989590`.
 - This correction is retained in the worklog rather than erasing the failed intermediate attempt. The latest full workflow must compile the corrected source.
+
+
+### Signing secret-name reconciliation — 2026-11-20
+
+- Corrected `.github/workflows/android11-aarch32-fix.yml` to read the established GitHub Actions secrets `NESTBOX_KEYSTORE_BASE64` and `NESTBOX_KEYSTORE_PASSWORD` in both the Gradle signing-key restore step and independent certificate verification step. The workflow no longer references `NAPBOX_KEYSTORE_*` secret names. Commit: `a8a594396293cd78d964d1e0406c59e6e847f952`.
+- The earlier overlapping runs were triggered before this workflow correction and are not accepted as the final signing verification. A new full workflow run on the corrected branch head must prove that the established secrets are available and that the NapBox certificate fingerprint still matches. No secret values are recorded or exposed.
