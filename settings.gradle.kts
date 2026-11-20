@@ -13,5 +13,5 @@ dependencyResolutionManagement {
         maven("https://jitpack.io") // libadb-android, sun-security-android
     }
 }
-rootProject.name = "Nestbox"
+rootProject.name = "NapBox"
 include(":app")
