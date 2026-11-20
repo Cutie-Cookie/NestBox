@@ -37,6 +37,8 @@ Known host device:
 
 Investigate actual memory limits and guest allocation rather than assuming all 8 GB can be assigned to the guest. User observed that the guest appears to use about 2 GB even when Android seems to allow roughly 3–4+ GB. Measure available memory, process limits, cgroup/LMK constraints, and guest configuration before changing allocation.
 
+Important implementation distinction discovered in the pinned rootless backend: the current `ram_mb` startup argument configures `vine_lmkd --budget-mb`, an app-private-memory budget that drives cached/background guest-app killing under budget or host memory pressure. It does not reserve guest RAM or enforce a hard guest memory cap. Do not describe the existing preset values as actual guest RAM caps; measure the guest and host first, then correct the UI semantics and choose safe P55 values.
+
 Keep the built-in Android 13 GApps ROM available in the shared ROM cache. Export must COPY, never MOVE. Do not break future machine creation by consuming or relocating the shared ROM source.
 
 ## 4. Product identity and appearance — current work, not compatibility proof
