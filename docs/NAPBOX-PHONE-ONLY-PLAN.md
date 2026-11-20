@@ -173,3 +173,12 @@ Source audit after the first diagnostic:
 - The current ModernEngine.health() reports fps=-1 (not measured), so NapBox has no valid actual-FPS telemetry. The existing stop snapshot does not capture SurfaceFlinger frame timing or GPU utilization/frequency. This is a measurement gap.
 - Do not change CPU affinity, governor/frequency, guest memory budget, or GPU backend based only on this report. First add read-only frame timing and best-effort GPU devfreq/busy telemetry, then compare an identical guest workload. Keep existing Build 61 restoration/merge/packaging/signing intact.
 - A reversible user-side A/B check can compare the same guest workload at 90-FPS Performance vs 60-FPS Balanced, holding 720×1600 constant. This tests whether the 90-FPS target is overambitious; it does not establish actual FPS or CPU-core differences. Do not simultaneously change Low memory mode, since that would confound the comparison and could increase host memory pressure.
+
+
+## Low-FPS telemetry instrumentation — 2026-11-20
+
+To address the user's guest-only low-FPS report without guessing at tuning, the next diagnostic build adds read-only telemetry:
+- Guest snapshot now captures SurfaceFlinger layer names, SurfaceFlinger latency timestamps (bounded to the most recent output), and a bounded gfxinfo summary. These are diagnostic observations only; they do not change rendering behavior.
+- Host snapshot now probes matching GPU/Mali/3D entries under /sys/class/devfreq for current/min/max frequency, available frequencies, governor, load/busy/total time and polling interval. Restricted or absent nodes are reported unavailable.
+- No CPU affinity, governor, frequency, GPU backend, display refresh target, Low memory mode, or memory budget is changed.
+- The diagnostic build must still pass the complete Build 61 restoration/merge/package/alignment/signing workflow and all artifact checks. The user must install and run it to obtain the new telemetry; no FPS improvement is claimed by instrumentation alone.
