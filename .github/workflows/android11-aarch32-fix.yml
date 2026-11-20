@@ -385,6 +385,8 @@ jobs:
           : "${NESTBOX_KEYSTORE_PASSWORD:?Missing GitHub secret NESTBOX_KEYSTORE_PASSWORD}"
           printf '%s' "$NESTBOX_KEYSTORE_BASE64" | base64 --decode > app/signing.keystore
           test -s app/signing.keystore
+          echo "Keystore aliases and public certificate fingerprints:"
+          keytool -list -v -keystore app/signing.keystore -storepass "$NESTBOX_KEYSTORE_PASSWORD" | awk '/Alias name:|SHA256:/ { print }'
           echo "SIGNING_STORE_FILE=$GITHUB_WORKSPACE/app/signing.keystore" >> "$GITHUB_ENV"
           echo "SIGNING_STORE_PASSWORD=$NESTBOX_KEYSTORE_PASSWORD" >> "$GITHUB_ENV"
           echo "SIGNING_KEY_ALIAS=napbox-release" >> "$GITHUB_ENV"
