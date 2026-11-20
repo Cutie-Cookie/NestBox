@@ -416,24 +416,24 @@ class ModernEngine(
                 echo '[cgroups]'
                 cat /proc/self/cgroup 2>/dev/null
                 for f in /sys/fs/cgroup/cpu.max /sys/fs/cgroup/cpuset.cpus.effective /sys/fs/cgroup/memory.max /sys/fs/cgroup/memory.current /sys/fs/cgroup/pids.max /sys/fs/cgroup/pids.current /sys/fs/cgroup/pids.events; do
-                  if [ -r "${'f" ]; then echo "\${'$'}f"; cat "\${'$'}f"; fi
+                  if [ -r "${'$'}f" ]; then echo "${'$'}f"; cat "${'$'}f"; fi
                 done
                 echo '[graphics]'
                 diag_dir=/data/local/tmp/napbox-frame-diagnostics
-                mkdir -p "\${'$'}diag_dir"
-                dumpsys SurfaceFlinger > "\${'$'}diag_dir/surfaceflinger.txt" 2>&1
-                grep -iE 'GLES|renderer|vendor' "\${'$'}diag_dir/surfaceflinger.txt" | sed -n '1,20p'
+                mkdir -p "${'$'}diag_dir"
+                dumpsys SurfaceFlinger > "${'$'}diag_dir/surfaceflinger.txt" 2>&1
+                grep -iE 'GLES|renderer|vendor' "${'$'}diag_dir/surfaceflinger.txt" | sed -n '1,20p'
                 echo '[surfaceflinger_layers]'
-                dumpsys SurfaceFlinger --list > "\${'$'}diag_dir/layers.txt" 2>&1
-                sed -n '1,40p' "\${'$'}diag_dir/layers.txt"
+                dumpsys SurfaceFlinger --list > "${'$'}diag_dir/layers.txt" 2>&1
+                sed -n '1,40p' "${'$'}diag_dir/layers.txt"
                 echo '[surfaceflinger_latency]'
-                dumpsys SurfaceFlinger --latency > "\${'$'}diag_dir/latency.txt" 2>&1
-                tail -n 130 "\${'$'}diag_dir/latency.txt"
+                dumpsys SurfaceFlinger --latency > "${'$'}diag_dir/latency.txt" 2>&1
+                tail -n 130 "${'$'}diag_dir/latency.txt"
                 echo '[foreground_activity]'
-                dumpsys activity activities > "\${'$'}diag_dir/activities.txt" 2>&1
-                fg_line=$(grep -E 'mResumedActivity|topResumedActivity' "\${'$'}diag_dir/activities.txt" | tail -n 1)
-                printf '%s\n' "\${'$'}fg_line"
-                fg_pkg=$(printf '%s\n' "\${'$'}fg_line" | sed -nE 's/.* u[0-9]+ ([^/ ]+)\/.*/\1/p')
+                dumpsys activity activities > "${'$'}diag_dir/activities.txt" 2>&1
+                fg_line=$(grep -E 'mResumedActivity|topResumedActivity' "${'$'}diag_dir/activities.txt" | tail -n 1)
+                printf '%s\n' "${'$'}fg_line"
+                fg_pkg=$(printf '%s\n' "${'$'}fg_line" | sed -nE 's/.* u[0-9]+ ([^/ ]+)\/.*/\1/p')
                 dump_gfx_threads() {
                   gfx_file="${'$'}1"
                   gfx_label="${'$'}2"
@@ -443,7 +443,7 @@ class ModernEngine(
                     ''|*[!0-9]*) return ;;
                   esac
                   if [ ! -d "/proc/${'$'}gfx_pid/task" ]; then
-                    echo "thread_directory_unavailable"
+                    echo 'thread_directory_unavailable'
                     return
                   fi
                   for thread in /proc/"${'$'}gfx_pid"/task/*; do
@@ -463,7 +463,8 @@ class ModernEngine(
                   dumpsys gfxinfo "${'$'}fg_pkg" > "${'$'}diag_dir/gfxinfo-foreground.txt" 2>&1
                   sed -n '1,240p' "${'$'}diag_dir/gfxinfo-foreground.txt"
                   dump_gfx_threads "${'$'}diag_dir/gfxinfo-foreground.txt" foreground
-                fi            """.trimIndent()
+                fi
+            """.trimIndent()
             runCatching { h.request("exec", v.id, "15000", "sh", "-c", guestSnapshot, timeoutMs = 20_000) }
                 .getOrNull()?.takeIf { it.ok }?.let { texts["guest-runtime.txt"] = it.payload }
             // The guest's own logcat explains crashes; it works as long as the guest's logd is up.
