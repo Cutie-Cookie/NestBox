@@ -67,7 +67,7 @@ Use the repository's existing Actions secret names exactly:
 - `NESTBOX_KEYSTORE_BASE64`
 - `NESTBOX_KEYSTORE_PASSWORD`
 
-Do not rename these secrets. If the signing identity changes, replace the values under these same names only after explicit coordination and verify the resulting certificate fingerprint. The workflow currently needs an audit because the branch's workflow was changed to read `NAPBOX_KEYSTORE_BASE64` and `NAPBOX_KEYSTORE_PASSWORD`; that conflicts with this project's established secret names and must be reconciled before the next trusted build.
+Do not rename these secrets. If the signing identity changes, replace the values under these same names only after explicit coordination and verify the resulting certificate fingerprint. The workflow has been corrected to read the established `NESTBOX_KEYSTORE_BASE64` and `NESTBOX_KEYSTORE_PASSWORD` names. However, CI runs #154 and #155 decoded the current NESTBOX store and found alias `nestbox-release` with certificate SHA-256 `1D:D1:CF:B8:84:6E:F3:DD:B4:39:C1:C8:B2:32:F2:C4:0F:90:75:F5:83:63:2C:C8:D8:23:5C:20:C0:9C:6B:C4`, not the required NapBox alias `napbox-release` and fingerprint `77:C7:A2:52:99:2B:66:AE:F7:4D:53:A8:BF:BC:49:C2:86:40:2F:5D:08:78:B5:EF:D7:1F:60:FB:25:99:DD:A0`. Update the values under the existing NESTBOX secret names to the NapBox release keystore and matching password before another trusted build. Do not rename secrets or sign with the old certificate.
 
 New NapBox keystore details recorded during this project:
 - Alias: `napbox-release`

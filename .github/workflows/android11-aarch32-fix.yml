@@ -387,6 +387,12 @@ jobs:
           test -s app/signing.keystore
           echo "Keystore aliases and public certificate fingerprints:"
           keytool -list -v -keystore app/signing.keystore -storepass "$NESTBOX_KEYSTORE_PASSWORD" | awk '/Alias name:|SHA256:/ { print }'
+          EXPECTED_CERT="77C7A252992B66AEF74D53A8BFBC49C286402F5D0878B5EFD71F60FB2599DDA0"
+          ACTUAL_CERT="$(keytool -list -v -keystore app/signing.keystore -storepass "$NESTBOX_KEYSTORE_PASSWORD" -alias napbox-release 2>/dev/null | awk '/SHA256:/ { gsub(":", "", $2); print toupper($2); exit }' || true)"
+          if [[ "$ACTUAL_CERT" != "$EXPECTED_CERT" ]]; then
+            echo "::error::The existing NESTBOX keystore does not contain the expected NapBox release certificate (alias napbox-release, SHA-256 77:C7:A2:52:99:2B:66:AE:F7:4D:53:A8:BF:BC:49:C2:86:40:2F:5D:08:78:B5:EF:D7:1F:60:FB:25:99:DD:A0). Update the values of the existing NESTBOX_KEYSTORE_BASE64 and NESTBOX_KEYSTORE_PASSWORD secrets."
+            exit 1
+          fi
           echo "SIGNING_STORE_FILE=$GITHUB_WORKSPACE/app/signing.keystore" >> "$GITHUB_ENV"
           echo "SIGNING_STORE_PASSWORD=$NESTBOX_KEYSTORE_PASSWORD" >> "$GITHUB_ENV"
           echo "SIGNING_KEY_ALIAS=napbox-release" >> "$GITHUB_ENV"
