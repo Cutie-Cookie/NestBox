@@ -87,3 +87,12 @@ Not yet verified:
 - Updated workflow to download the retained Build 61 artifact using `gh run download` with read-only Actions permission and verify the APK SHA-256. Updated merge script to use the preserved raw DEX backup from Build 61 and exclude duplicate backup insertion while keeping the full merge/filter/verify/re-sign path.
 - Commits: workflow `6d51a0657e82ef5a45a477974fa0e8e8c8a26aaf`; merge script `69b2bbd1de7172add0140941903aad40cfc1aec6`.
 - Next: monitor the workflow triggered by the merge-script commit. Do not deliver until it completes and the final APK is fully verified and compared against Build 61.
+
+
+## Build 61 artifact retrieval attempt — run 44731178483 (#129)
+
+- Native backend and all required ARM64 native library checks passed; Gradle `assembleDebug` passed in 2m 43s.
+- The new Build 61 artifact download step reached `gh run download` but failed because the restore-step environment did not include `GH_TOKEN` (GitHub CLI error: “To use GitHub CLI in a GitHub Actions workflow, set the GH_TOKEN environment variable”).
+- Corrected the workflow so the restore step explicitly receives `${{ github.token }}` as `GH_TOKEN`. The workflow already grants `actions: read` and `contents: read`.
+- The same commit's parallel documentation-triggered runs (#128, #130, #131) are not considered valid verification attempts; they use intermediate workflow/script states and must not be used as deliverables.
+- Next: a new push-triggered run must prove artifact download, checksum, DEX filtering, merge, re-sign, final verification and artifact upload all succeed.
