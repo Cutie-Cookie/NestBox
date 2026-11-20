@@ -320,3 +320,22 @@ Not yet verified:
 - Added read-only guest and host process-limit telemetry: `/proc/self/limits`, cgroup `pids.max/current/events`, guest ActivityManager `max_cached_processes` and `max_phantom_processes`, plus process scheduler counters. No limits or performance settings are changed.
 - Existing guest runtime policy already writes `max_phantom_processes=2147483647` and `max_cached_processes=8` when Low memory mode is enabled. The latter is a cached-app policy, not a 128-child process cap. The newly added measurements are intended to identify any separate RLIMIT_NPROC or cgroup PID ceiling; no 128-process limit is assumed.
 - No CPU affinity, clock, GPU backend, refresh rate, RAM/LMK budget, or Low memory setting changed. This is instrumentation only; no performance improvement is claimed.
+
+
+## Repaired frame diagnostics and process-limit build #175 — 2026-11-20
+
+- Source changes:
+  - `app/src/main/java/app/nestbox/engine/modern/ModernEngine.kt`: replaced early-closed live `dumpsys | head/tail` pipelines with completed temporary-file captures; added explicit launcher gfxinfo and best-effort foreground-package gfxinfo.
+  - `app/src/main/java/app/nestbox/host/HostDiagnostics.kt`: added host `/proc/self/limits`, scheduler counters, and cgroup PID controller values (`pids.max/current/events`).
+  - Guest snapshot also records `/proc/self/limits`, scheduler counters, cgroup PID controller values, and ActivityManager cached/phantom process settings.
+- Source commits: ModernEngine `ee6b533115e347bd649e22edb2c44890e958b4ec`; HostDiagnostics `a8bfecfe8b48f83ea49db4a51fbb6752ddb6852a`; preceding documentation commit `3d73323f4692a03d6a3997179d459154138d27f2`. All are on `phone-only/build61-baseline`.
+- Two automatically triggered full Build 61 workflows completed successfully:
+  - #174, run ID `44778640070`, source commit `ee6b533115e347bd649e22edb2c44890e958b4ec`.
+  - #175, run ID `44778644454`, source commit `a8bfecfe8b48f83ea49db4a51fbb6752ddb6852a`. #175 is the selected artifact because it includes both source changes.
+- #175 completed with success. The full pinned native runtime, patched tawcroot, rootless helper, required ARM64 library preflight, Gradle packaging, Build 61 restoration/DEX merge, v3 signing, final verification and artifact upload all completed.
+- Signing preflight reported alias `napbox-release` and exact expected SHA-256 certificate `77:C7:A2:52:99:2B:66:AE:F7:4D:53:A8:BF:BC:49:C2:86:40:2F:5D:08:78:B5:EF:D7:1F:60:FB:25:99:DD:A0`. Final `apksigner verify` passed APK Signature Scheme v3. The workflow verified package `app.napbox`, min SDK 29, and all 16 required ARM64 libraries.
+- Selected artifact: ID `14651121530`, run URL https://github.com/Cutie-Cookie/NestBox/actions/runs/44778644454, ZIP size 33,606,393 bytes, ZIP SHA-256 `d6b6bdec87e11f462a5168880f22353ac437c96d014f7cad9b2f170e5df07cc0`. Independent download matched the ZIP digest. ZIP contains exactly `app-debug.apk`.
+- Inner APK size 80,546,417 bytes; SHA-256 `d56bcc3f2dece88478298dc0df9bc12cad7c4235066781f55213626fb420138b`.
+- Independent comparison against Build 61 reference APK (286 entries) found 287 candidate entries, no missing non-signature Build 61 paths, and no unexpected additions. The only added non-signature path is intended `res/mipmap-nodpi-v4/ic_launcher_cat.png`. Changed non-signature paths: manifest, signature manifest, current DEX files classes11/2/3/4/5/7, `libvine_helper.so`, adaptive launcher XML, and resources table. Old Build 61 signature files were removed for re-signing.
+- Both runtime `classes14.dex` and `assets/nestbox/original/classes14.dex` are byte-identical to Build 61. Candidate contains 22 ARM64 native libraries, all 16 required libraries, and no non-ARM64 native paths. Workflow merge reported 286 original entries, 131 original-only paths restored, 150 collisions kept from current build, and 2,236 unique classes retained in runtime classes14.dex.
+- This is a diagnostic instrumentation build, not an FPS fix. No runtime performance settings, CPU affinity, clocks, GPU backend, refresh rate, Low memory mode or RAM/LMK budget were changed. Actual phone-side process-limit and frame telemetry still needs to be collected and reviewed.
