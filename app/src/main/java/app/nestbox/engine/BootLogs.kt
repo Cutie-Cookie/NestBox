@@ -9,15 +9,15 @@ import java.util.Date
 import java.util.Locale
 
 /**
- * Saves everything needed to diagnose a failed boot to /sdcard/Nestbox/logs/<machine>-<time>/,
- * so no adb is needed. Falls back to Android/data/app.nbox/files/logs without storage permission.
+ * Saves everything needed to diagnose a failed boot to /sdcard/NapBox/logs/<machine>-<time>/,
+ * so no adb is needed. Falls back to Android/data/app.napbox/files/logs without storage permission.
  */
 object BootLogs {
     fun save(context: Context, machine: String, texts: Map<String, String>, files: Map<String, File>): String? {
         val stamp = SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US).format(Date())
         val name = machine.replace(Regex("[^A-Za-z0-9._-]"), "_") + "-" + stamp
         val roots = listOfNotNull(
-            File(Environment.getExternalStorageDirectory(), "Nestbox/logs"),
+            File(Environment.getExternalStorageDirectory(), "NapBox/logs"),
             context.getExternalFilesDir("logs"),
         )
         for (root in roots) {
