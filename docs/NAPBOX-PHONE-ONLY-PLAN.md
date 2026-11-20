@@ -97,3 +97,8 @@ A fix is complete only when:
 7. The user tests it on the Itel P55 Android 13 GApps ROM and confirms the relevant behavior.
 
 A successful Gradle compile or CI workflow alone is not proof of runtime compatibility.
+
+
+## Restoration input update — 2026-11-20
+
+The upstream v0.4.0 release URL used for the original APK returns HTTP 404 and the upstream release/tag is no longer available. The Build 61 complete artifact from run #61 was downloaded and inspected. Its inner APK SHA-256 is `68a137d9ea08ab71bbd788c99993007a4d763573efbda126a530cf377d0707ab`; it contains 286 entries, filtered runtime `classes14.dex`, the byte-for-byte original DEX backup at `assets/nestbox/original/classes14.dex`, and required original-only ARM64 libraries. The workflow now downloads that exact retained Build 61 artifact and verifies its SHA-256 before using it as the restoration source. The merge script preserves the raw DEX backup separately and filters the Build 61 runtime DEX against current-build classes. This is a controlled replacement of the unavailable upstream input with the verified full Build 61 reference, not a skipped merge. Final APK still must pass all merge, signing, entry, DEX, native-library and signature checks.
