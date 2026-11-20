@@ -399,21 +399,43 @@ class ModernEngine(
                 echo '[cpu]'
                 cat /sys/devices/system/cpu/online 2>/dev/null
                 grep -E 'Cpus_allowed_list|Threads:' /proc/self/status 2>/dev/null
+                cat /proc/self/schedstat 2>/dev/null
                 echo '[memory]'
                 grep -E 'MemTotal|MemFree|MemAvailable|SwapTotal|SwapFree' /proc/meminfo 2>/dev/null
+                echo '[process_limits]'
+                cat /proc/self/limits 2>/dev/null
+                echo '[activity_manager_limits]'
+                device_config get activity_manager max_cached_processes 2>/dev/null
+                device_config get activity_manager max_phantom_processes 2>/dev/null
                 echo '[cgroups]'
                 cat /proc/self/cgroup 2>/dev/null
-                for f in /sys/fs/cgroup/cpu.max /sys/fs/cgroup/cpuset.cpus.effective /sys/fs/cgroup/memory.max /sys/fs/cgroup/memory.current; do
-                  if [ -r "${'$'}f" ]; then echo "${'$'}f"; cat "${'$'}f"; fi
+                for f in /sys/fs/cgroup/cpu.max /sys/fs/cgroup/cpuset.cpus.effective /sys/fs/cgroup/memory.max /sys/fs/cgroup/memory.current /sys/fs/cgroup/pids.max /sys/fs/cgroup/pids.current /sys/fs/cgroup/pids.events; do
+                  if [ -r "\${'$'}f" ]; then echo "\${'$'}f"; cat "\${'$'}f"; fi
                 done
                 echo '[graphics]'
-                dumpsys SurfaceFlinger 2>/dev/null | grep -iE 'GLES|renderer|vendor' | head -20
+                diag_dir=/data/local/tmp/napbox-frame-diagnostics
+                mkdir -p "\${'$'}diag_dir"
+                dumpsys SurfaceFlinger > "\${'$'}diag_dir/surfaceflinger.txt" 2>&1
+                grep -iE 'GLES|renderer|vendor' "\${'$'}diag_dir/surfaceflinger.txt" | sed -n '1,20p'
                 echo '[surfaceflinger_layers]'
-                dumpsys SurfaceFlinger --list 2>/dev/null | head -40
+                dumpsys SurfaceFlinger --list > "\${'$'}diag_dir/layers.txt" 2>&1
+                sed -n '1,40p' "\${'$'}diag_dir/layers.txt"
                 echo '[surfaceflinger_latency]'
-                dumpsys SurfaceFlinger --latency 2>/dev/null | tail -130
-                echo '[gfxinfo_summary]'
-                dumpsys gfxinfo 2>/dev/null | head -180
+                dumpsys SurfaceFlinger --latency > "\${'$'}diag_dir/latency.txt" 2>&1
+                tail -n 130 "\${'$'}diag_dir/latency.txt"
+                echo '[foreground_activity]'
+                dumpsys activity activities > "\${'$'}diag_dir/activities.txt" 2>&1
+                fg_line=$(grep -E 'mResumedActivity|topResumedActivity' "\${'$'}diag_dir/activities.txt" | tail -n 1)
+                printf '%s\n' "\${'$'}fg_line"
+                fg_pkg=$(printf '%s\n' "\${'$'}fg_line" | sed -nE 's/.* u[0-9]+ ([^/ ]+)\/.*/\1/p')
+                echo '[gfxinfo_launcher]'
+                dumpsys gfxinfo com.android.launcher3 > "\${'$'}diag_dir/gfxinfo-launcher.txt" 2>&1
+                sed -n '1,240p' "\${'$'}diag_dir/gfxinfo-launcher.txt"
+                if [ -n "\${'$'}fg_pkg" ] && [ "\${'$'}fg_pkg" != com.android.launcher3 ]; then
+                  echo "[gfxinfo_foreground] \${'$'}fg_pkg"
+                  dumpsys gfxinfo "\${'$'}fg_pkg" > "\${'$'}diag_dir/gfxinfo-foreground.txt" 2>&1
+                  sed -n '1,240p' "\${'$'}diag_dir/gfxinfo-foreground.txt"
+                fi
             """.trimIndent()
             runCatching { h.request("exec", v.id, "15000", "sh", "-c", guestSnapshot, timeoutMs = 20_000) }
                 .getOrNull()?.takeIf { it.ok }?.let { texts["guest-runtime.txt"] = it.payload }
