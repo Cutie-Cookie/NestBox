@@ -1,11 +1,10 @@
-name: Build NestBox ARM64 APK (Android 11 AArch32 fix)
+name: Build NapBox ARM64 APK
 
 on:
   workflow_dispatch:
   push:
     branches:
-      - fix/android11-aarch32-detection
-      - fix/android11-rootless-boot-repair
+      - phone-only/build61-baseline
 
 permissions:
   contents: read
@@ -376,18 +375,18 @@ jobs:
       - name: Restore signing key for Gradle debug packaging
         shell: bash
         env:
-          NESTBOX_KEYSTORE_BASE64: ${{ secrets.NESTBOX_KEYSTORE_BASE64 }}
-          NESTBOX_KEYSTORE_PASSWORD: ${{ secrets.NESTBOX_KEYSTORE_PASSWORD }}
+          NAPBOX_KEYSTORE_BASE64: ${{ secrets.NAPBOX_KEYSTORE_BASE64 }}
+          NAPBOX_KEYSTORE_PASSWORD: ${{ secrets.NAPBOX_KEYSTORE_PASSWORD }}
         run: |
           set -euo pipefail
-          : "${NESTBOX_KEYSTORE_BASE64:?Missing GitHub secret NESTBOX_KEYSTORE_BASE64}"
-          : "${NESTBOX_KEYSTORE_PASSWORD:?Missing GitHub secret NESTBOX_KEYSTORE_PASSWORD}"
-          printf '%s' "$NESTBOX_KEYSTORE_BASE64" | base64 --decode > app/signing.keystore
+          : "${NAPBOX_KEYSTORE_BASE64:?Missing GitHub secret NAPBOX_KEYSTORE_BASE64}"
+          : "${NAPBOX_KEYSTORE_PASSWORD:?Missing GitHub secret NAPBOX_KEYSTORE_PASSWORD}"
+          printf '%s' "$NAPBOX_KEYSTORE_BASE64" | base64 --decode > app/signing.keystore
           test -s app/signing.keystore
           echo "SIGNING_STORE_FILE=$GITHUB_WORKSPACE/app/signing.keystore" >> "$GITHUB_ENV"
-          echo "SIGNING_STORE_PASSWORD=$NESTBOX_KEYSTORE_PASSWORD" >> "$GITHUB_ENV"
-          echo "SIGNING_KEY_ALIAS=nestbox-release" >> "$GITHUB_ENV"
-          echo "SIGNING_KEY_PASSWORD=$NESTBOX_KEYSTORE_PASSWORD" >> "$GITHUB_ENV"
+          echo "SIGNING_STORE_PASSWORD=$NAPBOX_KEYSTORE_PASSWORD" >> "$GITHUB_ENV"
+          echo "SIGNING_KEY_ALIAS=napbox-release" >> "$GITHUB_ENV"
+          echo "SIGNING_KEY_PASSWORD=$NAPBOX_KEYSTORE_PASSWORD" >> "$GITHUB_ENV"
 
       - name: Build debug APK
         run: ./gradlew --no-daemon clean assembleDebug
@@ -395,14 +394,14 @@ jobs:
       - name: Restore original APK-only components and re-sign
         shell: bash
         env:
-          NESTBOX_KEYSTORE_BASE64: ${{ secrets.NESTBOX_KEYSTORE_BASE64 }}
-          NESTBOX_KEYSTORE_PASSWORD: ${{ secrets.NESTBOX_KEYSTORE_PASSWORD }}
+          NAPBOX_KEYSTORE_BASE64: ${{ secrets.NAPBOX_KEYSTORE_BASE64 }}
+          NAPBOX_KEYSTORE_PASSWORD: ${{ secrets.NAPBOX_KEYSTORE_PASSWORD }}
         run: |
           set -euo pipefail
           APK="app/build/outputs/apk/debug/app-debug.apk"
-          ORIGINAL="$RUNNER_TEMP/NestBox-0.4.0-original.apk"
+          ORIGINAL="$RUNNER_TEMP/NapBox-0.4.0-original.apk"
           curl --fail --location --retry 3 \
-            "https://github.com/rifatrajbd/NestBox-An-Android-Emulator-Support-Lineage-OS/releases/download/v0.4.0/NestBox-0.4.0-debug.apk" \
+            "https://github.com/rifatrajbd/NapBox-An-Android-Emulator-Support-Lineage-OS/releases/download/v0.4.0/NapBox-0.4.0-debug.apk" \
             -o "$ORIGINAL"
           BAKSMALI="$RUNNER_TEMP/baksmali-3.0.10-fat.jar"
           SMALI="$RUNNER_TEMP/smali-3.0.10-fat.jar"
@@ -414,16 +413,16 @@ jobs:
           echo "32fa0e88a6c397b3922201adf5f3e534fbaed5a663c71d0c558c3ddce0af844a  $SMALI" | sha256sum -c -
           python3 -I scripts/merge_original_apk.py "$ORIGINAL" "$APK" "$BAKSMALI" "$SMALI"
           "$ANDROID_HOME/build-tools/35.0.0/zipalign" -f 4 "$APK" "$RUNNER_TEMP/app-aligned.apk"
-          : "${NESTBOX_KEYSTORE_BASE64:?Missing GitHub secret NESTBOX_KEYSTORE_BASE64}"
-          : "${NESTBOX_KEYSTORE_PASSWORD:?Missing GitHub secret NESTBOX_KEYSTORE_PASSWORD}"
-          printf '%s' "$NESTBOX_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/NestBox-release.p12"
-          test -s "$RUNNER_TEMP/NestBox-release.p12"
+          : "${NAPBOX_KEYSTORE_BASE64:?Missing GitHub secret NAPBOX_KEYSTORE_BASE64}"
+          : "${NAPBOX_KEYSTORE_PASSWORD:?Missing GitHub secret NAPBOX_KEYSTORE_PASSWORD}"
+          printf '%s' "$NAPBOX_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/NapBox-release.p12"
+          test -s "$RUNNER_TEMP/NapBox-release.p12"
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign \
-            --ks "$RUNNER_TEMP/NestBox-release.p12" \
+            --ks "$RUNNER_TEMP/NapBox-release.p12" \
             --ks-type PKCS12 \
-            --ks-key-alias nestbox-release \
-            --ks-pass env:NESTBOX_KEYSTORE_PASSWORD \
-            --key-pass env:NESTBOX_KEYSTORE_PASSWORD \
+            --ks-key-alias napbox-release \
+            --ks-pass env:NAPBOX_KEYSTORE_PASSWORD \
+            --key-pass env:NAPBOX_KEYSTORE_PASSWORD \
             --out "$RUNNER_TEMP/app-signed.apk" "$RUNNER_TEMP/app-aligned.apk"
           mv "$RUNNER_TEMP/app-signed.apk" "$APK"
 
@@ -435,13 +434,13 @@ jobs:
           test -s "$APK"
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$APK"
           CERTS="$("$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs "$APK")"
-          grep -Fqi "1dd1cfb8846ef3ddb439c1c8b232f2c40f9075f583632cc8d8235c20c09c6bc4" <<< "$CERTS" || {
-            echo "::error::APK was not signed with the permanent NestBox release key"
+          grep -Fqi "77c7a252992b66aef74d53a8bfbc49c286402f5d0878b5efd71f60fb2599dda0" <<< "$CERTS" || {
+            echo "::error::APK was not signed with the permanent NapBox release key"
             echo "$CERTS"
             exit 1
           }
           BADGING="$("$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK")"
-          grep -Fq "package: name='app.nbox'" <<< "$BADGING"
+          grep -Fq "package: name='app.napbox'" <<< "$BADGING"
           grep -Fq "sdkVersion:'29'" <<< "$BADGING"
           if unzip -Z1 "$APK" | grep -qE '^lib/(armeabi-v7a|x86|x86_64)/'; then
             echo "::error::Unexpected non-ARM64 native libraries found"
@@ -467,7 +466,7 @@ jobs:
       - name: Upload verified APK
         uses: actions/upload-artifact@v4
         with:
-          name: NestBox-arm64-v8a-debug-complete
+          name: NapBox-arm64-v8a-debug-complete
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 14
