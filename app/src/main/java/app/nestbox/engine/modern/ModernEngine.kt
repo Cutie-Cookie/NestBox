@@ -404,7 +404,7 @@ class ModernEngine(
                 echo '[cgroups]'
                 cat /proc/self/cgroup 2>/dev/null
                 for f in /sys/fs/cgroup/cpu.max /sys/fs/cgroup/cpuset.cpus.effective /sys/fs/cgroup/memory.max /sys/fs/cgroup/memory.current; do
-                  if [ -r "${'
+                  if [ -r "${'$'}f" ]; then echo "${'$'}f"; cat "${'$'}f"; fi
                 done
                 echo '[graphics]'
                 dumpsys SurfaceFlinger 2>/dev/null | grep -iE 'GLES|renderer|vendor' | head -20
