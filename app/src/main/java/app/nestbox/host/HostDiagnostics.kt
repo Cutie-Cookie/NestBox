@@ -56,6 +56,21 @@ object HostDiagnostics {
             ).joinToString(" ") { path -> "$path=${read(File(policy, path).path)}" })
         }
         appendLine()
+        appendLine("[gpu_devfreq]")
+        val devfreq = File("/sys/class/devfreq").listFiles().orEmpty()
+        val gpuDevices = devfreq.filter { device ->
+            val label = read(File(device, "name").path)
+            (device.name + " " + label).contains(Regex("gpu|mali|3d|g3d|v3d|vivante", RegexOption.IGNORE_CASE))
+        }
+        if (gpuDevices.isEmpty()) appendLine("gpu_devfreq=unavailable/restricted")
+        for (device in gpuDevices) {
+            val label = read(File(device, "name").path).let { if (it == UNAVAILABLE) device.name else it }
+            appendLine("$label: " + listOf(
+                "cur_freq", "min_freq", "max_freq", "available_frequencies", "governor",
+                "load", "busy_time", "total_time", "polling_interval"
+            ).joinToString(" ") { path -> "$path=${read(File(device, path).path)}" })
+        }
+        appendLine()
         appendLine("[process_and_cgroups]")
         appendLine("self_cgroup:\n${read("/proc/self/cgroup")}")
         appendLine("cpu_pressure:\n${read("/proc/pressure/cpu")}")
