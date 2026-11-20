@@ -408,6 +408,12 @@ class ModernEngine(
                 done
                 echo '[graphics]'
                 dumpsys SurfaceFlinger 2>/dev/null | grep -iE 'GLES|renderer|vendor' | head -20
+                echo '[surfaceflinger_layers]'
+                dumpsys SurfaceFlinger --list 2>/dev/null | head -40
+                echo '[surfaceflinger_latency]'
+                dumpsys SurfaceFlinger --latency 2>/dev/null | tail -130
+                echo '[gfxinfo_summary]'
+                dumpsys gfxinfo 2>/dev/null | head -180
             """.trimIndent()
             runCatching { h.request("exec", v.id, "15000", "sh", "-c", guestSnapshot, timeoutMs = 20_000) }
                 .getOrNull()?.takeIf { it.ok }?.let { texts["guest-runtime.txt"] = it.payload }
