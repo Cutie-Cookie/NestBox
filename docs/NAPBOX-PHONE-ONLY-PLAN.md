@@ -131,3 +131,31 @@ The upstream v0.4.0 release URL used for the original APK returns HTTP 404 and t
 ## First device-test feedback — 2026-11-20
 
 The user confirmed on the Itel P55 Android 13 built-in ROM: NapBox installs separately from NestBox; theme and launcher icon look correct; creating and booting the built-in Android 13 ROM works perfectly. A minor branding issue was identified: boot logs were saved under the legacy shared-storage folder `/sdcard/Nestbox/logs`. Updated `BootLogs.kt` to use `/sdcard/NapBox/logs`; the app-private fallback is now documented as `Android/data/app.napbox/files/logs`. This is a path-only branding correction, not a compatibility fix. Device compatibility for the tested built-in ROM is confirmed by the user's test, while other machines/features still need targeted testing.
+
+
+## First P55 runtime diagnostic results — 2026-11-20
+
+The user uploaded Phone-test1.zip, containing a successful running-session snapshot from Machine 1 (a13imp, Performance preset, 720×1600 at 90 Hz, GPU acceleration enabled). The snapshot was taken when the user stopped the running machine. The diagnostics report the engine as running, booted; guest logcat shows Android reached sys.boot_completed=1.
+
+Measured host CPU:
+- CPUs 0–7 are online and present.
+- NapBox process affinity is 0-7; guest-visible online and allowed CPU lists are also 0-7.
+- CPU capacity reports CPUs 0–5 at 544 and CPUs 6–7 at 1024, matching six efficiency cores and two performance cores.
+- cpufreq policy0 covers CPUs 0–5 (schedutil, 614.4 MHz current at snapshot, 1.612 GHz max); policy6 covers CPUs 6–7 (schedutil, 1.612 GHz current and max at snapshot).
+- No affinity pinning or CPU-frequency changes are justified by this single snapshot. The existing rootless CPU preset semantics remain unresolved/unenforced as previously documented.
+
+Measured host memory at stop:
+- Android ActivityManager total 8,149,807,104 bytes; available 1,826,951,168 bytes; low-memory flag false; threshold 226,492,416 bytes.
+- /proc/meminfo: MemTotal 7,958,796 kB; MemAvailable 1,530,560 kB; SwapTotal 4,377,332 kB; SwapFree 1,310,864 kB.
+- NapBox + guest process tree: 117 processes, summed PSS 2,126,692,352 bytes (~1.98 GiB).
+- Thermal status 0 (none), battery temperature 37.2°C.
+- Guest /proc/meminfo is effectively identical to host /proc/meminfo, and its cgroup paths reproduce the host app's cgroup paths. The rootless guest has host proc/cgroup views bound into it; these values must NOT be interpreted as an independent guest RAM allocation or guest memory cap. The snapshot does not reveal a hard guest RAM limit. Swap usage is substantial, so memory pressure warrants a controlled second measurement rather than raising any budget/preset.
+
+Graphics and guest:
+- Guest reports ANGLE on Vulkan 1.3.0, Virtio-GPU GFXStream, Mali-G57, gfxstream 25.3.6, OpenGL ES 3.1.
+- Wayland server reports 720×1600 at 90 Hz and a connected client.
+- Guest boot log shows rootless engine start, GPU gfxstream, and guest root via su. It also reports "low memory mode on"; the precise source/trigger of that mode is not yet established.
+- Guest logcat has no FATAL EXCEPTION, fatal signal, ANR, or OutOfMemoryError in this session. It contains 2,041 Fence error lines, mostly sync_merge(...) returning Inappropriate ioctl for device (-25) and some sync_file_info returned NULL; despite this, ANGLE/Vulkan initialized and the guest remained booted. Treat these as a graphics synchronization compatibility warning to correlate with any visible flicker, stutter, or rendering defects—not as proof of a crash or confirmed rendering failure.
+- Other permission-denied and missing host-kernel-interface messages occur in the rootless environment. No evidence yet that they prevented boot.
+
+No source, CPU affinity, frequency, memory-budget, or graphics behavior was changed based on this first snapshot. Next: ask whether the user noticed lag, flicker, freezes, audio issues, or unusual heating during this session; if performance tuning is needed, collect a second snapshot after a longer representative workload and compare host available memory/PSS/swap/thermal values. Investigate the fence warnings only against observed graphics symptoms. Do not infer independent guest RAM from guest meminfo.
