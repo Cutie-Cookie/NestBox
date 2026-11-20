@@ -250,3 +250,17 @@ Not yet verified:
   - #162, run ID 44764925030, commit 8fc599d672eece90959e428d58c5fb50e8fb04ae.
   - #163, run ID 44764931751, commit 2f24f489561a299992153f6122d3a5e26f4ab0a5.
   Both full jobs ended with success, including final complete installable ARM64 APK verification and artifact upload. No new APK is being selected or delivered from these documentation-only runs.
+
+
+## Low-FPS telemetry instrumentation attempt — 2026-11-20
+
+- Based on the user's report of guest-only low FPS with a smooth/cool host phone and no visible graphics corruption, added read-only guest frame telemetry to app/src/main/java/app/nestbox/engine/modern/ModernEngine.kt:
+  - SurfaceFlinger layer list (first 40 lines)
+  - SurfaceFlinger --latency output (last 130 lines)
+  - gfxinfo summary (first 180 lines)
+- Added best-effort Mali/GPU devfreq probing to app/src/main/java/app/nestbox/host/HostDiagnostics.kt for matching GPU/Mali/3D nodes: current/min/max frequency, available frequencies, governor, load/busy/total time and polling interval. Missing/restricted nodes are explicitly reported unavailable.
+- Source commits, both on phone-only/build61-baseline:
+  - ModernEngine guest frame telemetry: d706c64d38e159e29970c374a151a874d49a1c04 (workflow #166, run ID 44767118092).
+  - Host GPU devfreq telemetry: c5c218105d121cceff19561202d55abb3e6d2942 (workflow #167, run ID 44767130349).
+- These are measurement-only changes. No performance settings, CPU affinity, frequencies, memory budgets, refresh targets, Low memory mode, or GPU backend were altered. No claim of an FPS fix is made; the new logs are intended to identify whether the bottleneck is frame pacing, GPU saturation, or guest-side overhead.
+- Full Build 61 workflow status and final artifact verification are pending; record terminal results and artifact comparison below before offering a new diagnostic APK.
