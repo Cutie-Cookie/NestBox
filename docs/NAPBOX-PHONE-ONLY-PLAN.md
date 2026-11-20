@@ -79,7 +79,7 @@ The keystore password and Base64 are sensitive. Do not put either secret value i
 1. Read this plan and the latest worklog.
 2. Verify branch head and ensure all work is on `phone-only/build61-baseline`.
 3. Audit branding, app ID, icon resources, theme colors, signing secret names/fingerprint, ROM cache/export behavior, and the complete Build 61 workflow.
-4. Fix the original-APK restoration input failure without removing or simplifying `scripts/merge_original_apk.py` or its checks. The old release URL currently returns 404; locate a trustworthy copy from repository history/artifacts or another project-owned source and verify its SHA-256 equals the exact expected hash in the merge script before using it.
+4. Fix the original-APK restoration input failure without removing or simplifying `scripts/merge_original_apk.py` or its checks. RESOLVED: the workflow now retrieves the verified Build 61 artifact (run #61) and checks its SHA-256 before the complete restoration/merge process. See the worklog for evidence.
 5. Only then begin targeted Android 13 host compatibility diagnosis, using user-provided logs and measured device behavior. Change one evidence-backed cause at a time.
 6. Build with the full Build 61 workflow. Monitor the workflow until terminal status; inspect logs on failure and record the cause before retrying.
 7. Download the exact successful artifact and verify its identity, signature/certificate, required native libraries, DEX structure/backups, original assets/resources, and APK entry/hash differences against Build 61.
@@ -102,3 +102,8 @@ A successful Gradle compile or CI workflow alone is not proof of runtime compati
 ## Restoration input update — 2026-11-20
 
 The upstream v0.4.0 release URL used for the original APK returns HTTP 404 and the upstream release/tag is no longer available. The Build 61 complete artifact from run #61 was downloaded and inspected. Its inner APK SHA-256 is `68a137d9ea08ab71bbd788c99993007a4d763573efbda126a530cf377d0707ab`; it contains 286 entries, filtered runtime `classes14.dex`, the byte-for-byte original DEX backup at `assets/nestbox/original/classes14.dex`, and required original-only ARM64 libraries. The workflow now downloads that exact retained Build 61 artifact and verifies its SHA-256 before using it as the restoration source. The merge script preserves the raw DEX backup separately and filters the Build 61 runtime DEX against current-build classes. This is a controlled replacement of the unavailable upstream input with the verified full Build 61 reference, not a skipped merge. Final APK still must pass all merge, signing, entry, DEX, native-library and signature checks.
+
+
+## First device-test feedback — 2026-11-20
+
+The user confirmed on the Itel P55 Android 13 built-in ROM: NapBox installs separately from NestBox; theme and launcher icon look correct; creating and booting the built-in Android 13 ROM works perfectly. A minor branding issue was identified: boot logs were saved under the legacy shared-storage folder `/sdcard/Nestbox/logs`. Updated `BootLogs.kt` to use `/sdcard/NapBox/logs`; the app-private fallback is now documented as `Android/data/app.napbox/files/logs`. This is a path-only branding correction, not a compatibility fix. Device compatibility for the tested built-in ROM is confirmed by the user's test, while other machines/features still need targeted testing.
