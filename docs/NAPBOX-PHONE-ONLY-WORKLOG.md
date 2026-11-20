@@ -73,3 +73,17 @@ Not yet verified:
 4. Audit app theme colors and all remaining blue references; distinguish app UI background colors from launcher background.
 5. Confirm ROM cache export is copy-only and preserves the built-in Android 13 GApps source for future machines.
 6. Begin Android 13 device compatibility diagnosis only after the build/restore path is healthy; use fresh test archives and record each finding.
+
+
+## Failed build attempt — run 44730189264 (#127)
+
+- Commit: `7ba6eb3283701f4f386da3d48c1e5bd7fc70df5e` on `phone-only/build61-baseline`.
+- Native backend build and all required native library checks passed.
+- Gradle `assembleDebug` completed successfully in 3m 34s.
+- Signing secrets `NAPBOX_KEYSTORE_BASE64` and `NAPBOX_KEYSTORE_PASSWORD` were present and Gradle signing configuration validated.
+- Full restore step failed immediately because upstream URL `https://github.com/rifatrajbd/NapBox-An-Android-Emulator-Support-Lineage-OS/releases/download/v0.4.0/NapBox-0.4.0-debug.apk` returned HTTP 404. Signing/complete APK verification and artifact upload were skipped.
+- Confirmed upstream repository release tag `v0.4.0` is no longer available (GitHub API 404).
+- Downloaded Build 61 artifact ID `14337937391` from run #61 and inspected the inner APK. SHA-256: `68a137d9ea08ab71bbd788c99993007a4d763573efbda126a530cf377d0707ab`; 286 ZIP entries; contains filtered `classes14.dex`, byte-for-byte original DEX backup `assets/nestbox/original/classes14.dex`, and required original-only libraries `libOpenglRender.so`, `libloader.so`, `libtwoyi.so`.
+- Updated workflow to download the retained Build 61 artifact using `gh run download` with read-only Actions permission and verify the APK SHA-256. Updated merge script to use the preserved raw DEX backup from Build 61 and exclude duplicate backup insertion while keeping the full merge/filter/verify/re-sign path.
+- Commits: workflow `6d51a0657e82ef5a45a477974fa0e8e8c8a26aaf`; merge script `69b2bbd1de7172add0140941903aad40cfc1aec6`.
+- Next: monitor the workflow triggered by the merge-script commit. Do not deliver until it completes and the final APK is fully verified and compared against Build 61.
