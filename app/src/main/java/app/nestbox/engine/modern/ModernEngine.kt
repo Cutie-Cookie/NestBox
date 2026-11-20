@@ -10,6 +10,7 @@ import app.nestbox.engine.ProcUtil
 import app.nestbox.engine.VmEngine
 import app.nestbox.engine.VmState
 import app.nestbox.engine.rom.RomStore
+import app.nestbox.host.HostDiagnostics
 import app.nestbox.host.HostInfo
 import app.nestbox.settings.AppSettings
 import app.nestbox.vm.Catalog
@@ -376,14 +377,37 @@ class ModernEngine(
         val guest = guestDir(v.id)
         val texts = LinkedHashMap<String, String>()
         texts["summary.txt"] = buildString {
-            appendLine("Nestbox ${context.packageManager.getPackageInfo(context.packageName, 0).versionName}")
+            appendLine("NapBox ${context.packageManager.getPackageInfo(context.packageName, 0).versionName}")
             appendLine("Machine: ${v.name} (${v.id}) · Modern · ${v.romId} · ${v.preset} · ${v.res}")
             appendLine("Phone: ${host.deviceName} · ${host.osVersion} · ${host.socName} · ${host.gpu}")
-            appendLine("GPU acceleration: ${settings.gpuAcceleration}")
-            appendLine("Failure: $message")
+            appendLine("GPU acceleration setting: ${settings.gpuAcceleration}")
+            appendLine("Snapshot reason: $message")
         }
+        texts["host-runtime.txt"] = HostDiagnostics.snapshot(context)
         if (h != null) {
             runCatching { h.request("diag", v.id, timeoutMs = 15_000) }.getOrNull()?.let { texts["diag.txt"] = it.payload }
+            // This is read-only: it reports the guest's visible CPUs, affinity, memory and graphics stack.
+            val guestSnapshot = """
+                echo '[identity]'
+                uname -a
+                getprop ro.product.cpu.abilist
+                getprop ro.hardware.egl
+                getprop ro.hardware.vulkan
+                echo '[cpu]'
+                cat /sys/devices/system/cpu/online 2>/dev/null
+                grep -E 'Cpus_allowed_list|Threads:' /proc/self/status 2>/dev/null
+                echo '[memory]'
+                grep -E 'MemTotal|MemFree|MemAvailable|SwapTotal|SwapFree' /proc/meminfo 2>/dev/null
+                echo '[cgroups]'
+                cat /proc/self/cgroup 2>/dev/null
+                for f in /sys/fs/cgroup/cpu.max /sys/fs/cgroup/cpuset.cpus.effective /sys/fs/cgroup/memory.max /sys/fs/cgroup/memory.current; do
+                  if [ -r "$f" ]; then echo "$f"; cat "$f"; fi
+                done
+                echo '[graphics]'
+                dumpsys SurfaceFlinger 2>/dev/null | grep -iE 'GLES|renderer|vendor' | head -20
+            """.trimIndent()
+            runCatching { h.request("exec", v.id, "15000", "sh", "-c", guestSnapshot, timeoutMs = 20_000) }
+                .getOrNull()?.takeIf { it.ok }?.let { texts["guest-runtime.txt"] = it.payload }
             // The guest's own logcat explains crashes; it works as long as the guest's logd is up.
             runCatching { h.request("exec", v.id, "15000", "logcat", "-d", "-b", "all", timeoutMs = 20_000) }.getOrNull()
                 ?.let { texts["guest-logcat.txt"] = it.payload }
@@ -454,10 +478,13 @@ class ModernEngine(
     override suspend fun stop(vmId: String) {
         watchdog?.cancel()
         locationJob?.cancel()
-        // Powered off while still starting (a stuck boot): keep the logs that show where it hung.
+        // Capture a read-only host + guest snapshot before stopping, including successful runs.
+        // This gives us real device measurements without requiring adb or root access.
         val v = vm
-        if (v != null && state.value is VmState.Booting && settings.saveBootLogs) {
-            runCatching { collectLogs(v, "Powered off while starting") }
+        val previous = state.value
+        if (v != null && settings.saveBootLogs && (previous is VmState.Booting || previous is VmState.Running)) {
+            val reason = if (previous is VmState.Booting) "Powered off while starting" else "User stopped running machine"
+            runCatching { collectLogs(v, reason) }
         }
         closeDisplay()
         helper?.let {
