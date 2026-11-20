@@ -96,3 +96,17 @@ Not yet verified:
 - Corrected the workflow so the restore step explicitly receives `${{ github.token }}` as `GH_TOKEN`. The workflow already grants `actions: read` and `contents: read`.
 - The same commit's parallel documentation-triggered runs (#128, #130, #131) are not considered valid verification attempts; they use intermediate workflow/script states and must not be used as deliverables.
 - Next: a new push-triggered run must prove artifact download, checksum, DEX filtering, merge, re-sign, final verification and artifact upload all succeed.
+
+
+## Successful complete NapBox build — run 44731870127 (#132)
+
+- Active branch: `phone-only/build61-baseline`; workflow head commit: `dbd82ea56e199f89f4afa6cdb57a197d75f576ea` (source and merge logic identical to current branch head; later commit only appended this worklog).
+- Workflow completed successfully. Run: https://github.com/Cutie-Cookie/NestBox/actions/runs/44731870127
+- Artifact: `NapBox-arm64-v8a-debug-complete`, artifact ID `14626777688`, artifact SHA-256 `bae8e4dca9d5a898795d1a1d29200cdcb4fb80dd98054f8cf112d06e88af8e3e`.
+- Downloaded and independently inspected the artifact ZIP. It contains `app-debug.apk` (80,521,841 bytes); artifact ZIP is 33,596,637 bytes.
+- Final APK SHA-256: `57262c2e7948a5bb2b08180cd48da842e38b4f426fc378c2bca2aeb209ec07b2`.
+- Workflow verified APK Signature Scheme v3 and checked the expected NapBox certificate fingerprint (`77c7a252992b66aef74d53a8bfbc49c286402f5d0878b5efd71f60fb2599dda0`); package ID `app.napbox`; min SDK 29; all 16 required ARM64 libraries present; no unexpected non-ARM64 ABI libraries.
+- Merge log: Build 61 source archive verified at 286 entries; 131 original-only entries added; 150 colliding paths kept from current build; 2,236 unique classes retained in runtime `classes14.dex`; original raw DEX backup preserved byte-for-byte; 3 old signature entries replaced by NapBox signing.
+- Independent ZIP comparison against Build 61: 0 missing non-signature entries; only expected signature metadata was replaced; one new compiled launcher-cat resource added; 9 same-path entries changed (manifest, six current DEX files, patched `libvine_helper.so`, adaptive launcher XML, and `resources.arsc`). Required original-only libraries and both DEX files were present; `classes14.dex`, its original backup, and the original-only `libOpenglRender.so`, `libloader.so`, `libtwoyi.so` matched Build 61 byte-for-byte. Total ARM64 native library entries: 22.
+- This verifies a complete signed APK and preservation of Build 61's non-signature archive entries. It does not prove runtime compatibility or actual home-screen icon rendering; those require the user's Android 13 phone test.
+- User requested ZIP delivery rather than a direct APK link. Delivered file is the workflow artifact ZIP; it is smaller (33.6 MB) than the contained APK (80.5 MB).
