@@ -8,6 +8,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 jobs:
   build:
@@ -375,6 +376,7 @@ jobs:
       - name: Restore signing key for Gradle debug packaging
         shell: bash
         env:
+          GH_TOKEN: ${{ github.token }}
           NAPBOX_KEYSTORE_BASE64: ${{ secrets.NAPBOX_KEYSTORE_BASE64 }}
           NAPBOX_KEYSTORE_PASSWORD: ${{ secrets.NAPBOX_KEYSTORE_PASSWORD }}
         run: |
@@ -399,10 +401,17 @@ jobs:
         run: |
           set -euo pipefail
           APK="app/build/outputs/apk/debug/app-debug.apk"
-          ORIGINAL="$RUNNER_TEMP/NapBox-0.4.0-original.apk"
-          curl --fail --location --retry 3 \
-            "https://github.com/rifatrajbd/NapBox-An-Android-Emulator-Support-Lineage-OS/releases/download/v0.4.0/NapBox-0.4.0-debug.apk" \
-            -o "$ORIGINAL"
+          ORIGINAL="$RUNNER_TEMP/Build61-complete-reference.apk"
+          ARTIFACT_DIR="$RUNNER_TEMP/build61-reference"
+          mkdir -p "$ARTIFACT_DIR"
+          gh run download 44104470104 \
+            --repo Cutie-Cookie/NestBox \
+            --name NestBox-arm64-v8a-debug-complete \
+            --dir "$ARTIFACT_DIR"
+          test -s "$ARTIFACT_DIR/app-debug.apk"
+          cp "$ARTIFACT_DIR/app-debug.apk" "$ORIGINAL"
+          echo "Using verified Build 61 complete APK as restoration source."
+          echo "68a137d9ea08ab71bbd788c99993007a4d763573efbda126a530cf377d0707ab  $ORIGINAL" | sha256sum -c -
           BAKSMALI="$RUNNER_TEMP/baksmali-3.0.10-fat.jar"
           SMALI="$RUNNER_TEMP/smali-3.0.10-fat.jar"
           curl --fail --location --retry 3 \
