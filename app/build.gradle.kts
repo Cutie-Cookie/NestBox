@@ -11,13 +11,13 @@ android {
 
     defaultConfig {
         // Kept from 0.7 so updates install over existing machines
-        applicationId = "app.nbox"
+        applicationId = "app.napbox"
         minSdk = 29
         // 28: legacy storage for the shared folder (/sdcard/Nestbox) and boot logs, and the engine may
         // run guest programs from app storage, which Android blocks for apps targeting 29+.
         targetSdk = 28
         versionCode = 16
-        versionName = "0.8.0"
+        versionName = "0.9.0"
         ndk { abiFilters += "arm64-v8a" }
     }
 
