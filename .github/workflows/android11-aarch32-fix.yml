@@ -396,6 +396,7 @@ jobs:
       - name: Restore original APK-only components and re-sign
         shell: bash
         env:
+          GH_TOKEN: ${{ github.token }}
           NAPBOX_KEYSTORE_BASE64: ${{ secrets.NAPBOX_KEYSTORE_BASE64 }}
           NAPBOX_KEYSTORE_PASSWORD: ${{ secrets.NAPBOX_KEYSTORE_PASSWORD }}
         run: |
