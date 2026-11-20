@@ -119,3 +119,19 @@ Not yet verified:
 - Updated `app/src/main/java/app/nestbox/engine/BootLogs.kt` to write to `/sdcard/NapBox/logs`; updated fallback path documentation to `Android/data/app.napbox/files/logs`.
 - Commit: `d25d4ce6fae287649ce67dc0a2ec92aa8399541f` on `phone-only/build61-baseline`.
 - This is a small storage-path branding fix only. The previous tested APK's runtime results remain valid for its code; the new path change requires a new build/install to verify the new location. Do not imply the new path has been phone-tested until the user checks it.
+
+
+## Compatibility roadmap and uploaded test-log review — 2026-11-20
+
+- User requested that compatibility work begin before implementing the new phone-specific preset. The intended new preset is dedicated to the Itel P55 and must coexist with Battery, Balanced, and Performance; it must be based on measurements, not guessed values.
+- User also wants the guest to make efficient use of the T606's full CPU topology rather than concentrating work only on performance cores. Agreed design direction: make all eight cores eligible where the engine allows, while retaining Android/Linux scheduler decisions and host thermal controls. Do not pin to big cores or force maximum CPU frequency.
+- Reviewed current implementation:
+  - `Catalog.kt` currently defines Battery = 2 cores / 2 GB / 30 fps, Balanced = 4 / 3 GB / 60 fps, Performance = 6 / 4 GB / 90 fps.
+  - `ModernEngine.kt` sends the selected preset's value as `cpu_cores=<n>` to the native helper. Exact helper semantics still need inspection before increasing it to 8.
+  - `HostInfo.kt` reports a marketing-rounded RAM amount based on `ActivityManager.MemoryInfo.totalMem` and battery temperature, but does not yet profile CPU topology, affinity/cpuset, thermal status, or available memory pressure.
+  - `ProcUtil.kt` already has process-tree and PSS measurement helpers that can support guest memory profiling.
+  - `GuestProps.kt` currently handles low-memory guest properties but has no phone-specific CPU policy.
+- Reviewed uploaded archives `X11-test10.zip` through `X11-test14.zip`. All five describe Nestbox 0.8.0, imported ROM id `a13imp`, and report “Powered off while starting”. Their tombstones identify the guest image as LineageOS 18.1 / Android 11, despite the host phone being Android 13. In test10, SurfaceFlinger repeatedly aborts with “couldn't find an OpenGL ES implementation”; the EGL prep log initially staged zero ARM64 driver libraries. Later archives show the SwiftShader/ANGLE fallback adjustments and vendor wrapper replacement, but the imported Android 11 guest still does not reach a stable running state. These are historical imported-Android-11 diagnostics, not evidence about the active built-in Android 13 GApps target. Do not resume Android 11 work from these logs unless explicitly requested.
+- The user has separately confirmed that the current NapBox build creates and boots the built-in Android 13 GApps ROM on the actual Itel P55. That remains the active baseline for new compatibility diagnosis.
+- Next technical step: inspect native helper CPU handling and add read-only host/guest diagnostics for online CPU topology, frequency policies, cgroup/cpuset/affinity, available memory and guest PSS, and thermal state. Then measure the known-good Android 13 guest before changing behavior. Prioritize boot/graphics/memory reliability; tune CPU scheduling and create the P55 preset only after those measurements.
+- No APK build was requested or triggered for this planning/documentation update.
